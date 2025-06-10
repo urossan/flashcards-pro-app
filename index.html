@@ -64,6 +64,37 @@
             }, icons[name] || "📝");
         };
 
+        // Text-to-Speech Service
+        class SpeechService {
+            static speak(text, settings = {}) {
+                if (!('speechSynthesis' in window) || !settings.speechEnabled) return;
+                
+                // Cancel any ongoing speech
+                window.speechSynthesis.cancel();
+                
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = settings.speechRate || 1.0;
+                utterance.volume = 0.8;
+                
+                // Use selected voice if available
+                if (settings.speechVoice) {
+                    const voices = window.speechSynthesis.getVoices();
+                    const selectedVoice = voices.find(voice => voice.name === settings.speechVoice);
+                    if (selectedVoice) {
+                        utterance.voice = selectedVoice;
+                    }
+                }
+                
+                window.speechSynthesis.speak(utterance);
+            }
+            
+            static stop() {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
+                }
+            }
+        }
+
         // Context
         const FlashCardsContext = createContext(null);
         const useFlashCards = () => {
@@ -916,7 +947,23 @@
 
         // Mobile Study Card - Clean and Spacious
         function MobileStudyCard({ card, isFlipped, onFlip }) {
-            const { state: { theme } } = useFlashCards();
+            const { state: { theme, settings } } = useFlashCards();
+            
+            // Auto-read when card loads or flips
+            useEffect(() => {
+                if (settings.speechEnabled) {
+                    if (isFlipped && settings.autoReadAnswer) {
+                        // Small delay to let flip animation complete
+                        setTimeout(() => {
+                            SpeechService.speak(card.answer, settings);
+                        }, 600);
+                    } else if (!isFlipped && settings.autoReadQuestion) {
+                        setTimeout(() => {
+                            SpeechService.speak(card.question, settings);
+                        }, 300);
+                    }
+                }
+            }, [isFlipped, card, settings]);
             
             return (
                 <div className="relative w-full h-[28rem] perspective-1000" onClick={onFlip}>
@@ -974,10 +1021,18 @@
             const currentCard = cards[currentIndex];
             const progress = ((currentIndex + 1) / cards.length) * 100;
             
+            // Stop speech when component unmounts or session ends
+            useEffect(() => {
+                return () => {
+                    SpeechService.stop();
+                };
+            }, []);
+            
             const handleResponse = (isCorrect) => {
                 if (isProcessing) return; // Prevent double clicks
                 
                 setIsProcessing(true);
+                SpeechService.stop(); // Stop any ongoing speech
                 
                 // Update results immediately
                 setResults(prev => ({
@@ -1272,8 +1327,8 @@
                         speechEnabled: true,
                         speechRate: 1.0,
                         speechVoice: '',
-                        autoReadQuestion: false,
-                        autoReadAnswer: false,
+                        autoReadQuestion: true,
+                        autoReadAnswer: true,
                     },
                 };
             });
@@ -1362,6 +1417,18 @@
                 }));
             };
             
+            const toggleSpeech = () => {
+                setState(prev => ({
+                    ...prev,
+                    settings: {
+                        ...prev.settings,
+                        speechEnabled: !prev.settings.speechEnabled,
+                        autoReadQuestion: !prev.settings.speechEnabled,
+                        autoReadAnswer: !prev.settings.speechEnabled,
+                    }
+                }));
+            };
+            
             const value = {
                 state,
                 addCard,
@@ -1371,6 +1438,7 @@
                 toggleTheme,
                 importData,
                 clearAllCards,
+                toggleSpeech,
             };
             
             return React.createElement(FlashCardsContext.Provider, { value }, children);
@@ -1378,8 +1446,8 @@
 
         // Main App Component
         function MobileFlashCardsApp() {
-            const { state, toggleTheme, addCard, updateCard, deleteCard, addStudySession, importData, clearAllCards } = useFlashCards();
-            const { theme, cards, categories } = state;
+            const { state, toggleTheme, addCard, updateCard, deleteCard, addStudySession, importData, clearAllCards, toggleSpeech } = useFlashCards();
+            const { theme, cards, categories, settings } = state;
             
             const [activeView, setActiveView] = useState('cards');
             const [searchQuery, setSearchQuery] = useState('');
@@ -1513,7 +1581,7 @@
                     
                     {showMenu && (
                         <div className="fixed inset-0 z-50" onClick={() => setShowMenu(false)}>
-                            <div className={`absolute top-16 right-4 w-48 rounded-xl shadow-lg ${
+                            <div className={`absolute top-16 right-4 w-52 rounded-xl shadow-lg ${
                                 theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
                             } border overflow-hidden`}>
                                 <button
@@ -1547,6 +1615,19 @@
                                 >
                                     💾 Export Data
                                 </button>
+                                <div className={`border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                                    <button
+                                        onClick={() => {
+                                            toggleSpeech();
+                                            setShowMenu(false);
+                                        }}
+                                        className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
+                                            theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                                        }`}
+                                    >
+                                        {settings.speechEnabled ? '🔊' : '🔇'} Read Aloud {settings.speechEnabled ? 'ON' : 'OFF'}
+                                    </button>
+                                </div>
                                 <div className={`border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                                     <button
                                         onClick={handleClearAll}
