@@ -64,7 +64,7 @@
             }, icons[name] || "📝");
         };
 
-        // Enhanced Text-to-Speech Service with better cancellation
+        // Enhanced Text-to-Speech Service with better cancellation and state management
         class SpeechService {
             static currentUtterance = null;
             static isPlaying = false;
@@ -72,7 +72,7 @@
             static speak(text, settings = {}) {
                 if (!('speechSynthesis' in window) || !settings.speechEnabled) return;
                 
-                // Always cancel any ongoing speech first
+                // Always cancel any ongoing speech first - critical for preventing race conditions
                 this.stop();
                 
                 const utterance = new SpeechSynthesisUtterance(text);
@@ -992,40 +992,58 @@
             );
         }
 
-        // Enhanced Mobile Study Card with better speech coordination
+        // Enhanced Mobile Study Card with simplified, reliable speech
         function MobileStudyCard({ card, isFlipped, onFlip }) {
             const { state: { theme, settings } } = useFlashCards();
             const speechTimeoutRef = useRef(null);
-            const cardIdRef = useRef(card.id);
-            const isFlippedRef = useRef(isFlipped);
+            const lastCardIdRef = useRef(null);
+            const lastFlippedRef = useRef(null);
             
-            // Track changes in card or flip state
+            // Clear speech function
+            const clearSpeech = useCallback(() => {
+                SpeechService.stop();
+                if (speechTimeoutRef.current) {
+                    clearTimeout(speechTimeoutRef.current);
+                    speechTimeoutRef.current = null;
+                }
+            }, []);
+            
+            // Speech effect - simplified and more predictable
             useEffect(() => {
-                const cardChanged = cardIdRef.current !== card.id;
-                const flipChanged = isFlippedRef.current !== isFlipped;
+                // Always clear speech first
+                clearSpeech();
                 
-                // If card or flip state changed, immediately stop any ongoing speech
-                if (cardChanged || flipChanged) {
-                    SpeechService.stop();
-                    
-                    // Clear any pending speech timeouts
-                    if (speechTimeoutRef.current) {
-                        clearTimeout(speechTimeoutRef.current);
-                        speechTimeoutRef.current = null;
+                // Only start speech if enabled
+                if (!settings.speechEnabled) return;
+                
+                // Determine if this is a card change vs flip
+                const isCardChange = lastCardIdRef.current !== card.id;
+                const isFlipChange = lastFlippedRef.current !== isFlipped;
+                
+                // Update refs immediately
+                lastCardIdRef.current = card.id;
+                lastFlippedRef.current = isFlipped;
+                
+                // For card changes, ALWAYS start with question (ignore flip state initially)
+                if (isCardChange) {
+                    if (settings.autoReadQuestion) {
+                        speechTimeoutRef.current = setTimeout(() => {
+                            // Only read question if we're still on same card and showing question
+                            if (lastCardIdRef.current === card.id && !isFlipped) {
+                                SpeechService.speak(card.question, settings);
+                            }
+                            speechTimeoutRef.current = null;
+                        }, 300);
                     }
+                    return; // Exit early for card changes
                 }
                 
-                // Update refs
-                cardIdRef.current = card.id;
-                isFlippedRef.current = isFlipped;
-                
-                // Start new speech if enabled
-                if (settings.speechEnabled) {
-                    const delay = cardChanged ? 200 : 400; // Shorter delay for card changes
-                    
+                // For flip changes only
+                if (isFlipChange) {
+                    const delay = 500; // Consistent delay for flips
                     speechTimeoutRef.current = setTimeout(() => {
-                        // Double-check that we're still on the same card and flip state
-                        if (cardIdRef.current === card.id && isFlippedRef.current === isFlipped) {
+                        // Validate we're still in the same state
+                        if (lastCardIdRef.current === card.id && lastFlippedRef.current === isFlipped) {
                             if (isFlipped && settings.autoReadAnswer) {
                                 SpeechService.speak(card.answer, settings);
                             } else if (!isFlipped && settings.autoReadQuestion) {
@@ -1035,33 +1053,18 @@
                         speechTimeoutRef.current = null;
                     }, delay);
                 }
-                
-                // Cleanup function
-                return () => {
-                    if (speechTimeoutRef.current) {
-                        clearTimeout(speechTimeoutRef.current);
-                        speechTimeoutRef.current = null;
-                    }
-                };
-            }, [card.id, isFlipped, settings]);
+            }, [card.id, isFlipped, settings.speechEnabled, settings.autoReadQuestion, settings.autoReadAnswer, clearSpeech]);
             
             // Cleanup on unmount
             useEffect(() => {
                 return () => {
-                    SpeechService.stop();
-                    if (speechTimeoutRef.current) {
-                        clearTimeout(speechTimeoutRef.current);
-                    }
+                    clearSpeech();
                 };
-            }, []);
+            }, [clearSpeech]);
             
             const handleCardClick = () => {
-                // Stop speech immediately when user interacts
-                SpeechService.stop();
-                if (speechTimeoutRef.current) {
-                    clearTimeout(speechTimeoutRef.current);
-                    speechTimeoutRef.current = null;
-                }
+                // Immediately stop any speech when user interacts
+                clearSpeech();
                 onFlip();
             };
             
@@ -1134,6 +1137,12 @@
                     SpeechService.stop();
                 }
             }, [showCompletePrompt]);
+            
+            // Ensure clean start for each new card
+            useEffect(() => {
+                // Stop any ongoing speech when card changes
+                SpeechService.stop();
+            }, [currentIndex]);
             
             const handleResponse = (isCorrect) => {
                 if (isProcessing) return; // Prevent double clicks
