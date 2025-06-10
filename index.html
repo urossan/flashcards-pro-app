@@ -1355,13 +1355,7 @@
                                             QUESTION {currentIndex}
                                         </div>
                                     </div>
-                                    <div className="flex-1 overflow-y-auto flex items-center justify-center">
-                                        <div className="text-center w-full">
-                                            <h2 className="text-xl md:text-2xl font-medium leading-relaxed">
-                                                {prevCard.question.replace(/^Q\d+\)\s*/, '')}
-                                            </h2>
-                                        </div>
-                                    </div>
+                                    {/* No text content during peek */}
                                 </div>
                             </div>
                         )}
@@ -1388,13 +1382,7 @@
                                             QUESTION {currentIndex + 2}
                                         </div>
                                     </div>
-                                    <div className="flex-1 overflow-y-auto flex items-center justify-center">
-                                        <div className="text-center w-full">
-                                            <h2 className="text-xl md:text-2xl font-medium leading-relaxed">
-                                                {nextCard.question.replace(/^Q\d+\)\s*/, '')}
-                                            </h2>
-                                        </div>
-                                    </div>
+                                    {/* No text content during peek */}
                                 </div>
                             </div>
                         )}
@@ -1477,7 +1465,7 @@
                                 {/* Content that changes with fade */}
                                 <div className="flex-1 overflow-y-auto flex items-center justify-center">
                                     <div className="text-center w-full">
-                                        <h2 className={`text-xl md:text-2xl font-medium leading-relaxed whitespace-pre-line transition-all duration-300 ${
+                                        <h2 className={`text-3xl md:text-4xl font-medium leading-relaxed whitespace-pre-line transition-all duration-300 ${
                                             isTransitioning ? 'opacity-30 scale-98' : 'opacity-100 scale-100'
                                         }`}>
                                             {isFlipped ? currentCard.answer : cleanQuestion}
@@ -1485,38 +1473,18 @@
                                     </div>
                                 </div>
                                 
-                                {/* Page curl corners */}
+                                {/* Page numbers without triangular corners */}
                                 {hasPrev && (
-                                    <div className="absolute bottom-0 left-0 w-12 h-12">
-                                        <div className={`absolute bottom-0 left-0 w-0 h-0 border-l-12 border-b-12 ${
-                                            theme === 'dark' 
-                                                ? 'border-l-gray-700 border-b-gray-600' 
-                                                : 'border-l-gray-300 border-b-gray-200'
-                                        } shadow-lg`} style={{
-                                            borderLeftWidth: '48px',
-                                            borderBottomWidth: '48px',
-                                            borderLeftColor: theme === 'dark' ? '#374151' : '#d1d5db',
-                                            borderBottomColor: theme === 'dark' ? '#4b5563' : '#e5e7eb'
-                                        }}></div>
-                                        <div className="absolute bottom-1 left-1 text-xs font-bold text-gray-600 dark:text-gray-300">
+                                    <div className="absolute bottom-4 left-4">
+                                        <div className="text-xs font-bold text-gray-600 dark:text-gray-300">
                                             {currentIndex}
                                         </div>
                                     </div>
                                 )}
                                 
                                 {hasNext && (
-                                    <div className="absolute bottom-0 right-0 w-12 h-12">
-                                        <div className={`absolute bottom-0 right-0 w-0 h-0 border-r-12 border-b-12 ${
-                                            theme === 'dark' 
-                                                ? 'border-r-gray-700 border-b-gray-600' 
-                                                : 'border-r-gray-300 border-b-gray-200'
-                                        } shadow-lg`} style={{
-                                            borderRightWidth: '48px',
-                                            borderBottomWidth: '48px',
-                                            borderRightColor: theme === 'dark' ? '#374151' : '#d1d5db',
-                                            borderBottomColor: theme === 'dark' ? '#4b5563' : '#e5e7eb'
-                                        }}></div>
-                                        <div className="absolute bottom-1 right-1 text-xs font-bold text-gray-600 dark:text-gray-300">
+                                    <div className="absolute bottom-4 right-4">
+                                        <div className="text-xs font-bold text-gray-600 dark:text-gray-300">
                                             {currentIndex + 2}
                                         </div>
                                     </div>
