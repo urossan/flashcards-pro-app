@@ -47,7 +47,7 @@
     <div id="root"></div>
     
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useCallback, createContext, useContext } = React;
+        const { useState, useEffect, useMemo, useCallback, createContext, useContext, useRef } = React;
 
         // Simple Icons
         const Icon = ({ name, className = "w-5 h-5" }) => {
@@ -64,13 +64,16 @@
             }, icons[name] || "📝");
         };
 
-        // Text-to-Speech Service
+        // Enhanced Text-to-Speech Service with better cancellation
         class SpeechService {
+            static currentUtterance = null;
+            static isPlaying = false;
+            
             static speak(text, settings = {}) {
                 if (!('speechSynthesis' in window) || !settings.speechEnabled) return;
                 
-                // Cancel any ongoing speech
-                window.speechSynthesis.cancel();
+                // Always cancel any ongoing speech first
+                this.stop();
                 
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.rate = settings.speechRate || 1.0;
@@ -85,13 +88,57 @@
                     }
                 }
                 
+                // Track the current utterance and state
+                this.currentUtterance = utterance;
+                this.isPlaying = true;
+                
+                // Handle speech events
+                utterance.onend = () => {
+                    this.currentUtterance = null;
+                    this.isPlaying = false;
+                };
+                
+                utterance.onerror = () => {
+                    this.currentUtterance = null;
+                    this.isPlaying = false;
+                };
+                
+                utterance.onstart = () => {
+                    this.isPlaying = true;
+                };
+                
                 window.speechSynthesis.speak(utterance);
             }
             
             static stop() {
                 if ('speechSynthesis' in window) {
+                    // Cancel all speech
                     window.speechSynthesis.cancel();
+                    
+                    // Reset our tracking variables
+                    this.currentUtterance = null;
+                    this.isPlaying = false;
                 }
+            }
+            
+            static pause() {
+                if ('speechSynthesis' in window && this.isPlaying) {
+                    window.speechSynthesis.pause();
+                }
+            }
+            
+            static resume() {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.resume();
+                }
+            }
+            
+            static getStatus() {
+                return {
+                    isPlaying: this.isPlaying,
+                    isPaused: window.speechSynthesis?.paused || false,
+                    currentUtterance: this.currentUtterance
+                };
             }
         }
 
@@ -945,28 +992,81 @@
             );
         }
 
-        // Mobile Study Card - Clean and Spacious
+        // Enhanced Mobile Study Card with better speech coordination
         function MobileStudyCard({ card, isFlipped, onFlip }) {
             const { state: { theme, settings } } = useFlashCards();
+            const speechTimeoutRef = useRef(null);
+            const cardIdRef = useRef(card.id);
+            const isFlippedRef = useRef(isFlipped);
             
-            // Auto-read when card loads or flips
+            // Track changes in card or flip state
             useEffect(() => {
-                if (settings.speechEnabled) {
-                    if (isFlipped && settings.autoReadAnswer) {
-                        // Small delay to let flip animation complete
-                        setTimeout(() => {
-                            SpeechService.speak(card.answer, settings);
-                        }, 600);
-                    } else if (!isFlipped && settings.autoReadQuestion) {
-                        setTimeout(() => {
-                            SpeechService.speak(card.question, settings);
-                        }, 300);
+                const cardChanged = cardIdRef.current !== card.id;
+                const flipChanged = isFlippedRef.current !== isFlipped;
+                
+                // If card or flip state changed, immediately stop any ongoing speech
+                if (cardChanged || flipChanged) {
+                    SpeechService.stop();
+                    
+                    // Clear any pending speech timeouts
+                    if (speechTimeoutRef.current) {
+                        clearTimeout(speechTimeoutRef.current);
+                        speechTimeoutRef.current = null;
                     }
                 }
-            }, [isFlipped, card, settings]);
+                
+                // Update refs
+                cardIdRef.current = card.id;
+                isFlippedRef.current = isFlipped;
+                
+                // Start new speech if enabled
+                if (settings.speechEnabled) {
+                    const delay = cardChanged ? 200 : 400; // Shorter delay for card changes
+                    
+                    speechTimeoutRef.current = setTimeout(() => {
+                        // Double-check that we're still on the same card and flip state
+                        if (cardIdRef.current === card.id && isFlippedRef.current === isFlipped) {
+                            if (isFlipped && settings.autoReadAnswer) {
+                                SpeechService.speak(card.answer, settings);
+                            } else if (!isFlipped && settings.autoReadQuestion) {
+                                SpeechService.speak(card.question, settings);
+                            }
+                        }
+                        speechTimeoutRef.current = null;
+                    }, delay);
+                }
+                
+                // Cleanup function
+                return () => {
+                    if (speechTimeoutRef.current) {
+                        clearTimeout(speechTimeoutRef.current);
+                        speechTimeoutRef.current = null;
+                    }
+                };
+            }, [card.id, isFlipped, settings]);
+            
+            // Cleanup on unmount
+            useEffect(() => {
+                return () => {
+                    SpeechService.stop();
+                    if (speechTimeoutRef.current) {
+                        clearTimeout(speechTimeoutRef.current);
+                    }
+                };
+            }, []);
+            
+            const handleCardClick = () => {
+                // Stop speech immediately when user interacts
+                SpeechService.stop();
+                if (speechTimeoutRef.current) {
+                    clearTimeout(speechTimeoutRef.current);
+                    speechTimeoutRef.current = null;
+                }
+                onFlip();
+            };
             
             return (
-                <div className="relative w-full h-[28rem] perspective-1000" onClick={onFlip}>
+                <div className="relative w-full h-[28rem] perspective-1000" onClick={handleCardClick}>
                     <div className={`relative w-full h-full transition-transform duration-500 transform-style-preserve-3d cursor-pointer ${
                         isFlipped ? 'rotate-y-180' : ''
                     }`}>
@@ -1008,7 +1108,7 @@
             );
         }
 
-        // Study Mode Component
+        // Enhanced Study Mode Component with better speech management
         function MobileStudyMode({ cards, onComplete }) {
             const { state: { theme } } = useFlashCards();
             const [currentIndex, setCurrentIndex] = useState(0);
@@ -1028,11 +1128,18 @@
                 };
             }, []);
             
+            // Stop speech when session completes
+            useEffect(() => {
+                if (showCompletePrompt) {
+                    SpeechService.stop();
+                }
+            }, [showCompletePrompt]);
+            
             const handleResponse = (isCorrect) => {
                 if (isProcessing) return; // Prevent double clicks
                 
                 setIsProcessing(true);
-                SpeechService.stop(); // Stop any ongoing speech
+                SpeechService.stop(); // Stop any ongoing speech immediately
                 
                 // Update results immediately
                 setResults(prev => ({
@@ -1050,12 +1157,19 @@
                         setShowCompletePrompt(true);
                         setIsProcessing(false);
                     }
-                }, 300); // Reduced from 800ms to 300ms
+                }, 300);
             };
             
             const handleComplete = () => {
                 const duration = Math.floor((Date.now() - startTime) / 1000);
+                SpeechService.stop(); // Ensure speech is stopped
                 onComplete({ ...results, duration });
+            };
+            
+            const handleFlip = () => {
+                if (!isProcessing) {
+                    setIsFlipped(!isFlipped);
+                }
             };
             
             if (!currentCard) {
@@ -1101,7 +1215,7 @@
                         <MobileStudyCard
                             card={currentCard}
                             isFlipped={isFlipped}
-                            onFlip={() => !isProcessing && setIsFlipped(!isFlipped)}
+                            onFlip={handleFlip}
                         />
                     </div>
                     
@@ -1427,6 +1541,11 @@
                         autoReadAnswer: !prev.settings.speechEnabled,
                     }
                 }));
+                
+                // Stop any ongoing speech when disabling
+                if (state.settings.speechEnabled) {
+                    SpeechService.stop();
+                }
             };
             
             const value = {
@@ -1459,6 +1578,13 @@
             
             const fileInputRef = React.useRef(null);
             
+            // Stop speech when changing views or exiting study mode
+            useEffect(() => {
+                if (activeView !== 'study' || !isStudying) {
+                    SpeechService.stop();
+                }
+            }, [activeView, isStudying]);
+            
             const handleImport = () => {
                 fileInputRef.current?.click();
                 setShowMenu(false);
@@ -1469,6 +1595,7 @@
                     `Are you sure you want to delete ALL ${cards.length} cards?\n\nThis action cannot be undone and will also clear all your study progress.`
                 );
                 if (confirmed) {
+                    SpeechService.stop(); // Stop speech before clearing
                     clearAllCards();
                     setShowMenu(false);
                     alert('All cards have been cleared. You now have a clean slate!');
@@ -1520,8 +1647,15 @@
             };
             
             const startStudyingCard = (card) => {
+                SpeechService.stop(); // Stop any ongoing speech
                 setIsStudying(true);
                 setActiveView('study');
+            };
+            
+            const handleViewChange = (newView) => {
+                SpeechService.stop(); // Stop speech when changing views
+                setActiveView(newView);
+                setIsStudying(false);
             };
             
             return (
@@ -1829,10 +1963,7 @@
                     } border-t`}>
                         <div className="flex justify-around py-2">
                             <button
-                                onClick={() => { 
-                                    setActiveView('cards'); 
-                                    setIsStudying(false); 
-                                }}
+                                onClick={() => handleViewChange('cards')}
                                 className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
                                     activeView === 'cards' && !isStudying 
                                         ? 'text-blue-500' 
@@ -1843,10 +1974,7 @@
                                 <span className="text-xs">Cards</span>
                             </button>
                             <button
-                                onClick={() => { 
-                                    setActiveView('study'); 
-                                    setIsStudying(false); 
-                                }}
+                                onClick={() => handleViewChange('study')}
                                 className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
                                     activeView === 'study' || isStudying 
                                         ? 'text-blue-500' 
@@ -1857,10 +1985,7 @@
                                 <span className="text-xs">Study</span>
                             </button>
                             <button
-                                onClick={() => { 
-                                    setActiveView('stats'); 
-                                    setIsStudying(false); 
-                                }}
+                                onClick={() => handleViewChange('stats')}
                                 className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
                                     activeView === 'stats' 
                                         ? 'text-blue-500' 
