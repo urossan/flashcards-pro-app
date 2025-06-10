@@ -1117,7 +1117,7 @@
             const [slideDirection, setSlideDirection] = useState('');
             const [isSliding, setIsSliding] = useState(false);
             const [animationPhase, setAnimationPhase] = useState('idle'); // 'idle', 'slide-out', 'slide-in'
-            const [flipPhase, setFlipPhase] = useState('idle'); // 'idle', 'flipping'
+            const [isTransitioning, setIsTransitioning] = useState(false); // For fade transition
             
             const currentCard = cards[currentIndex];
             const hasNext = currentIndex < cards.length - 1;
@@ -1170,18 +1170,18 @@
             };
             
             const handleCardClick = () => {
-                if (isSliding || flipPhase !== 'idle') return; // Prevent clicks during animations
+                if (isSliding || animationPhase !== 'idle' || isTransitioning) return; // Prevent clicks during animations
                 
                 SpeechService.stop();
-                setFlipPhase('flipping');
+                setIsTransitioning(true);
                 
-                // Enhanced flip with better timing
+                // Fade transition: fade out, flip state, then fade in
                 setTimeout(() => {
                     onFlip();
                     setTimeout(() => {
-                        setFlipPhase('idle');
-                    }, 200); // Allow flip to complete
-                }, 100);
+                        setIsTransitioning(false);
+                    }, 200); // Fade in duration
+                }, 200); // Fade out duration
             };
             
             // Enhanced slide animation calculations
@@ -1220,7 +1220,7 @@
                 e.currentTarget.style.transform = 'scale(1)';
                 e.currentTarget.style.transition = 'transform 0.2s ease-out';
                 
-                if (isSliding || animationPhase !== 'idle') return; // Ignore touches during animation
+                if (isSliding || animationPhase !== 'idle' || isTransitioning) return; // Ignore touches during animation
                 
                 const touch = e.changedTouches[0];
                 touchEndRef.current = { x: touch.clientX, y: touch.clientY };
@@ -1256,7 +1256,7 @@
                         }
                     }
                 } else {
-                    // Tap - flip card with enhanced feedback
+                    // Tap - fade transition to flip
                     handleCardClick();
                 }
             };
@@ -1297,62 +1297,54 @@
                         onTouchEnd={handleTouchEnd}
                     >
                         <div 
-                            className={`relative w-full max-w-2xl h-full transform-style-preserve-3d cursor-pointer transition-all duration-500 ease-out ${
-                                isFlipped ? 'rotate-y-180' : ''
-                            } ${
-                                flipPhase === 'flipping' ? 'scale-105' : ''
-                            }`}
+                            className={`relative w-full max-w-2xl h-full cursor-pointer transition-all duration-500 ease-out`}
                             style={{
-                                transform: `
-                                    ${isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'} 
-                                    ${getSlideTransform()} 
-                                    ${flipPhase === 'flipping' ? 'scale(1.05)' : 'scale(1)'}
-                                `,
+                                transform: getSlideTransform(),
                                 transition: 'all 0.5s cubic-bezier(0.4, 0.0, 0.2, 1)',
                                 filter: animationPhase !== 'idle' ? 'blur(1px)' : 'blur(0px)',
                                 opacity: getSlideOpacity()
                             }}
                             onClick={handleCardClick}
                         >
-                            {/* Question side with enhanced effects */}
-                            <div className={`absolute inset-0 backface-hidden rounded-3xl p-8 flex flex-col ${
+                            {/* Single card container with fade transition */}
+                            <div className={`w-full h-full rounded-3xl p-8 flex flex-col ${
                                 theme === 'dark' 
                                     ? 'bg-gradient-to-br from-gray-800 via-gray-900 to-gray-800 text-white' 
                                     : 'bg-gradient-to-br from-white via-gray-50 to-white'
                             } shadow-2xl overflow-hidden border-2 ${
                                 theme === 'dark' ? 'border-gray-600' : 'border-gray-200'
-                            }`}
+                            } transition-opacity duration-200`}
                             style={{
-                                transformStyle: 'preserve-3d',
-                                backfaceVisibility: 'hidden',
+                                opacity: isTransitioning ? 0.3 : 1,
                                 boxShadow: `
                                     0 25px 50px -12px rgba(0, 0, 0, 0.25),
-                                    0 0 30px rgba(59, 130, 246, ${flipPhase === 'flipping' ? '0.3' : '0.1'})
+                                    0 0 30px rgba(59, 130, 246, ${isTransitioning ? '0.3' : '0.1'})
                                 `
                             }}>
-                                {/* Enhanced QUESTION label with glow */}
+                                {/* Label that changes based on state */}
                                 <div className="text-center mb-4">
                                     <div className={`text-lg font-light tracking-widest transition-all duration-300 ${
-                                        flipPhase === 'flipping' ? 'opacity-20 scale-95' : 'opacity-40'
+                                        isTransitioning ? 'opacity-20 scale-95' : 'opacity-40'
                                     }`}
                                     style={{
-                                        textShadow: flipPhase === 'flipping' ? '0 0 20px rgba(59, 130, 246, 0.5)' : 'none'
+                                        textShadow: isTransitioning ? '0 0 20px rgba(59, 130, 246, 0.5)' : 'none'
                                     }}>
-                                        QUESTION
+                                        {isFlipped ? 'ANSWER' : 'QUESTION'}
                                     </div>
                                 </div>
                                 
+                                {/* Content that changes with fade */}
                                 <div className="flex-1 overflow-y-auto flex items-center justify-center">
                                     <div className="text-center w-full">
-                                        <h2 className={`text-xl md:text-2xl font-medium leading-relaxed transition-all duration-300 ${
-                                            flipPhase === 'flipping' ? 'opacity-60 scale-98' : 'opacity-100 scale-100'
+                                        <h2 className={`text-xl md:text-2xl font-medium leading-relaxed whitespace-pre-line transition-all duration-300 ${
+                                            isTransitioning ? 'opacity-30 scale-98' : 'opacity-100 scale-100'
                                         }`}>
-                                            {cleanQuestion}
+                                            {isFlipped ? currentCard.answer : cleanQuestion}
                                         </h2>
                                     </div>
                                 </div>
                                 
-                                {/* Page curl corners for question side */}
+                                {/* Page curl corners */}
                                 {hasPrev && (
                                     <div className="absolute bottom-0 left-0 w-12 h-12">
                                         <div className={`absolute bottom-0 left-0 w-0 h-0 border-l-12 border-b-12 ${
@@ -1384,70 +1376,6 @@
                                             borderBottomColor: theme === 'dark' ? '#4b5563' : '#e5e7eb'
                                         }}></div>
                                         <div className="absolute bottom-1 right-1 text-xs font-bold text-gray-600 dark:text-gray-300">
-                                            {currentIndex + 2}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                            
-                            {/* Answer side with enhanced effects */}
-                            <div className={`absolute inset-0 backface-hidden rounded-3xl p-8 flex flex-col bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white shadow-2xl overflow-hidden border-2 border-gray-700`}
-                            style={{
-                                transform: 'rotateY(180deg)',
-                                transformStyle: 'preserve-3d',
-                                backfaceVisibility: 'hidden',
-                                boxShadow: `
-                                    0 25px 50px -12px rgba(0, 0, 0, 0.4),
-                                    0 0 30px rgba(147, 51, 234, ${flipPhase === 'flipping' ? '0.4' : '0.15'}),
-                                    inset 0 1px 0 rgba(255, 255, 255, 0.1)
-                                `
-                            }}>
-                                {/* Enhanced ANSWER label with glow */}
-                                <div className="text-center mb-4">
-                                    <div className={`text-lg font-light tracking-widest transition-all duration-300 ${
-                                        flipPhase === 'flipping' ? 'opacity-20 scale-95' : 'opacity-40'
-                                    }`}
-                                    style={{
-                                        textShadow: flipPhase === 'flipping' ? '0 0 20px rgba(147, 51, 234, 0.6)' : 'none'
-                                    }}>
-                                        ANSWER
-                                    </div>
-                                </div>
-                                
-                                <div className="flex-1 overflow-y-auto flex items-center justify-center">
-                                    <div className="text-center w-full">
-                                        <h2 className={`text-xl md:text-2xl font-medium leading-relaxed whitespace-pre-line transition-all duration-300 ${
-                                            flipPhase === 'flipping' ? 'opacity-60 scale-98' : 'opacity-100 scale-100'
-                                        }`}>
-                                            {currentCard.answer}
-                                        </h2>
-                                    </div>
-                                </div>
-                                
-                                {/* Page curl corners for answer side */}
-                                {hasPrev && (
-                                    <div className="absolute bottom-0 left-0 w-12 h-12">
-                                        <div className={`absolute bottom-0 left-0 w-0 h-0 border-l-12 border-b-12 border-l-gray-800 border-b-gray-700 shadow-lg`} style={{
-                                            borderLeftWidth: '48px',
-                                            borderBottomWidth: '48px',
-                                            borderLeftColor: '#1f2937',
-                                            borderBottomColor: '#374151'
-                                        }}></div>
-                                        <div className="absolute bottom-1 left-1 text-xs font-bold text-gray-300">
-                                            {currentIndex}
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                {hasNext && (
-                                    <div className="absolute bottom-0 right-0 w-12 h-12">
-                                        <div className={`absolute bottom-0 right-0 w-0 h-0 border-r-12 border-b-12 border-r-gray-800 border-b-gray-700 shadow-lg`} style={{
-                                            borderRightWidth: '48px',
-                                            borderBottomWidth: '48px',
-                                            borderRightColor: '#1f2937',
-                                            borderBottomColor: '#374151'
-                                        }}></div>
-                                        <div className="absolute bottom-1 right-1 text-xs font-bold text-gray-300">
                                             {currentIndex + 2}
                                         </div>
                                     </div>
