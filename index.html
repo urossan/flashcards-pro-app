@@ -1351,7 +1351,7 @@
                                     theme === 'dark' ? 'border-gray-500' : 'border-gray-300'
                                 }`}>
                                     <div className="text-center mb-4">
-                                        <div className="text-lg font-light tracking-widest opacity-60">
+                                        <div className="text-2xl font-light tracking-widest opacity-60">
                                             QUESTION {currentIndex}
                                         </div>
                                     </div>
@@ -1378,7 +1378,7 @@
                                     theme === 'dark' ? 'border-gray-500' : 'border-gray-300'
                                 }`}>
                                     <div className="text-center mb-4">
-                                        <div className="text-lg font-light tracking-widest opacity-60">
+                                        <div className="text-2xl font-light tracking-widest opacity-60">
                                             QUESTION {currentIndex + 2}
                                         </div>
                                     </div>
@@ -1400,7 +1400,7 @@
                                     >
                                         <div className={`text-20xl font-bold ${
                                             theme === 'dark' ? 'text-white' : 'text-gray-800'
-                                        }`} style={{ fontSize: '20rem', lineHeight: '1' }}>
+                                        }`} style={{ fontSize: '10rem', lineHeight: '1' }}>
                                             {currentIndex}
                                         </div>
                                     </div>
@@ -1416,7 +1416,7 @@
                                     >
                                         <div className={`text-20xl font-bold ${
                                             theme === 'dark' ? 'text-white' : 'text-gray-800'
-                                        }`} style={{ fontSize: '20rem', lineHeight: '1' }}>
+                                        }`} style={{ fontSize: '10rem', lineHeight: '1' }}>
                                             {currentIndex + 2}
                                         </div>
                                     </div>
@@ -1450,22 +1450,22 @@
                                     0 0 30px rgba(59, 130, 246, ${isTransitioning ? '0.3' : '0.1'})
                                 `
                             }}>
-                                {/* Label that changes based on state */}
+                                {/* Enhanced label with dynamic numbering - 50% bigger */}
                                 <div className="text-center mb-4">
-                                    <div className={`text-lg font-light tracking-widest transition-all duration-300 ${
+                                    <div className={`text-2xl font-light tracking-widest transition-all duration-300 ${
                                         isTransitioning ? 'opacity-20 scale-95' : 'opacity-40'
                                     }`}
                                     style={{
                                         textShadow: isTransitioning ? '0 0 20px rgba(59, 130, 246, 0.5)' : 'none'
                                     }}>
-                                        {isFlipped ? 'ANSWER' : 'QUESTION'}
+                                        {isFlipped ? `ANSWER ${currentIndex + 1}` : `QUESTION ${currentIndex + 1}`}
                                     </div>
                                 </div>
                                 
-                                {/* Content that changes with fade */}
+                                {/* Content 30% smaller */}
                                 <div className="flex-1 overflow-y-auto flex items-center justify-center">
                                     <div className="text-center w-full">
-                                        <h2 className={`text-3xl md:text-4xl font-medium leading-relaxed whitespace-pre-line transition-all duration-300 ${
+                                        <h2 className={`text-2xl md:text-3xl font-medium leading-relaxed whitespace-pre-line transition-all duration-300 ${
                                             isTransitioning ? 'opacity-30 scale-98' : 'opacity-100 scale-100'
                                         }`}>
                                             {isFlipped ? currentCard.answer : cleanQuestion}
