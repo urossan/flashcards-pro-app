@@ -462,7 +462,7 @@
             {
                 id: '19',
                 question: 'Q19) If radios are to be used during the lifting operations, what FIVE actions and checks must be made before use?',
-                answer: '1. Check if people involved know how to use them\n2. Check if batteries will last for the duration of the operation or spare batteries are supplied\n3. Check if all involved in the lifting are on the same frequency (channel)\n4. Check if the signal strength is sufficient\n5. Check if the frequency is clear from other interferences',
+                answer: '1. Check if people involved know how to use them\n2. Check if batteries will last for the duration of the operation or spare batteries are supplied\n3. Check if all involved in the lifting are on the same frequency (channel)\n4. Check if the frequency is clear from other interferences',
                 category: 'Theory Questions',
                 tags: ['radios', 'communication', 'checks'],
                 difficulty: 'hard'
@@ -1284,15 +1284,14 @@
             );
         }
 
-        // Enhanced Study Mode Component with better speech management
+        // Enhanced Study Mode Component with Fullscreen Support
         function MobileStudyMode({ cards, onComplete }) {
             const { state: { theme } } = useFlashCards();
             const [currentIndex, setCurrentIndex] = useState(0);
             const [isFlipped, setIsFlipped] = useState(false);
-            const [results, setResults] = useState({ correct: 0, incorrect: 0 });
+            const [isFullscreen, setIsFullscreen] = useState(false);
             const [startTime] = useState(Date.now());
             const [showCompletePrompt, setShowCompletePrompt] = useState(false);
-            const [isProcessing, setIsProcessing] = useState(false);
             
             const currentCard = cards[currentIndex];
             const progress = ((currentIndex + 1) / cards.length) * 100;
@@ -1317,41 +1316,42 @@
                 SpeechService.stop();
             }, [currentIndex]);
             
-            const handleResponse = (isCorrect) => {
-                if (isProcessing) return; // Prevent double clicks
-                
-                setIsProcessing(true);
-                SpeechService.stop(); // Stop any ongoing speech immediately
-                
-                // Update results immediately
-                setResults(prev => ({
-                    ...prev,
-                    [isCorrect ? 'correct' : 'incorrect']: prev[isCorrect ? 'correct' : 'incorrect'] + 1
-                }));
-                
-                // Short delay for visual feedback, then advance
-                setTimeout(() => {
-                    if (currentIndex < cards.length - 1) {
-                        setCurrentIndex(prev => prev + 1);
-                        setIsFlipped(false);
-                        setIsProcessing(false);
-                    } else {
-                        setShowCompletePrompt(true);
-                        setIsProcessing(false);
-                    }
-                }, 300);
+            const handleFlip = () => {
+                setIsFlipped(!isFlipped);
+            };
+            
+            const handleNavigate = (newIndex) => {
+                if (newIndex >= 0 && newIndex < cards.length) {
+                    setCurrentIndex(newIndex);
+                    setIsFlipped(false); // Always start with question
+                }
+            };
+            
+            const handleNext = () => {
+                if (currentIndex < cards.length - 1) {
+                    handleNavigate(currentIndex + 1);
+                } else {
+                    // End of cards
+                    setShowCompletePrompt(true);
+                }
             };
             
             const handleComplete = () => {
                 const duration = Math.floor((Date.now() - startTime) / 1000);
-                SpeechService.stop(); // Ensure speech is stopped
-                onComplete({ ...results, duration });
+                SpeechService.stop();
+                onComplete({ 
+                    correct: cards.length, // Simple completion count for now
+                    incorrect: 0, 
+                    duration 
+                });
             };
             
-            const handleFlip = () => {
-                if (!isProcessing) {
-                    setIsFlipped(!isFlipped);
-                }
+            const handleFullscreen = () => {
+                setIsFullscreen(true);
+            };
+            
+            const handleExitFullscreen = () => {
+                setIsFullscreen(false);
             };
             
             if (!currentCard) {
@@ -1365,6 +1365,20 @@
                 );
             }
             
+            // Fullscreen mode
+            if (isFullscreen) {
+                return (
+                    <FullscreenStudyMode
+                        cards={cards}
+                        currentIndex={currentIndex}
+                        isFlipped={isFlipped}
+                        onFlip={handleFlip}
+                        onNavigate={handleNavigate}
+                        onExit={handleExitFullscreen}
+                    />
+                );
+            }
+            
             return (
                 <div className="space-y-4 pb-6">
                     <div className="p-4 rounded-xl">
@@ -1372,16 +1386,16 @@
                             <span className="text-sm font-medium">
                                 Question {currentIndex + 1} of {cards.length}
                             </span>
-                            <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-1">
-                                    <Icon name="check" className="w-4 h-4 text-green-500" />
-                                    <span className="text-sm font-medium">{results.correct}</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <Icon name="x" className="w-4 h-4 text-red-500" />
-                                    <span className="text-sm font-medium">{results.incorrect}</span>
-                                </div>
-                            </div>
+                            <button
+                                onClick={handleFullscreen}
+                                className={`px-3 py-1 rounded-lg text-sm ${
+                                    theme === 'dark' 
+                                        ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
+                                        : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                                } transition-colors`}
+                            >
+                                🔳 Fullscreen
+                            </button>
                         </div>
                         <div className={`h-2 rounded-full overflow-hidden ${
                             theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
@@ -1398,49 +1412,33 @@
                             card={currentCard}
                             isFlipped={isFlipped}
                             onFlip={handleFlip}
+                            enableFullscreen={true}
+                            onFullscreen={handleFullscreen}
                         />
                     </div>
                     
                     <div className="px-4">
-                        {isFlipped ? (
-                            <div className="space-y-3">
-                                <p className={`text-center text-sm ${
-                                    theme === 'dark' ? 'text-gray-300' : 'text-gray-600'
-                                }`}>
-                                    How well did you know this answer?
-                                </p>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        onClick={() => handleResponse(false)}
-                                        disabled={isProcessing}
-                                        className={`py-4 bg-red-500 text-white rounded-xl hover:bg-red-600 font-medium transition-all active:scale-95 ${
-                                            isProcessing ? 'opacity-50 cursor-not-allowed' : ''
-                                        }`}
-                                    >
-                                        ❌ Didn't Know
-                                    </button>
-                                    <button
-                                        onClick={() => handleResponse(true)}
-                                        disabled={isProcessing}
-                                        className={`py-4 bg-green-500 text-white rounded-xl hover:bg-green-600 font-medium transition-all active:scale-95 ${
-                                            isProcessing ? 'opacity-50 cursor-not-allowed' : ''
-                                        }`}
-                                    >
-                                        ✅ I Knew It
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
+                        <div className="grid grid-cols-2 gap-3">
                             <button
-                                onClick={() => setIsFlipped(true)}
-                                disabled={isProcessing}
-                                className={`w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 text-lg font-medium transition-all active:scale-95 ${
-                                    isProcessing ? 'opacity-50 cursor-not-allowed' : ''
+                                onClick={() => handleNavigate(currentIndex - 1)}
+                                disabled={currentIndex === 0}
+                                className={`py-3 rounded-xl border font-medium transition-all ${
+                                    currentIndex === 0
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : theme === 'dark'
+                                        ? 'border-gray-700 hover:bg-gray-800'
+                                        : 'border-gray-300 hover:bg-gray-100'
                                 }`}
                             >
-                                Show Answer
+                                ← Previous
                             </button>
-                        )}
+                            <button
+                                onClick={handleNext}
+                                className="py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium transition-all"
+                            >
+                                {currentIndex === cards.length - 1 ? 'Complete' : 'Next →'}
+                            </button>
+                        </div>
                     </div>
                     
                     {showCompletePrompt && (
@@ -1451,23 +1449,13 @@
                                 <h3 className="text-xl font-semibold mb-4 text-center">Session Complete! 🎉</h3>
                                 <div className="space-y-3 mb-6">
                                     <div className="flex justify-between">
-                                        <span>Cards studied:</span>
-                                        <span className="font-medium">{results.correct + results.incorrect}</span>
+                                        <span>Cards reviewed:</span>
+                                        <span className="font-medium">{cards.length}</span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span>I knew it:</span>
-                                        <span className="font-medium text-green-500">{results.correct}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Didn't know:</span>
-                                        <span className="font-medium text-red-500">{results.incorrect}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Knowledge rate:</span>
+                                        <span>Time spent:</span>
                                         <span className="font-medium">
-                                            {results.correct + results.incorrect > 0
-                                                ? Math.round((results.correct / (results.correct + results.incorrect)) * 100)
-                                                : 0}%
+                                            {Math.floor((Date.now() - startTime) / 60000)}m {Math.floor(((Date.now() - startTime) % 60000) / 1000)}s
                                         </span>
                                     </div>
                                 </div>
