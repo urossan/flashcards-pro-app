@@ -993,7 +993,7 @@
         }
 
         // Enhanced Mobile Study Card with simplified, reliable speech
-        function MobileStudyCard({ card, isFlipped, onFlip }) {
+        function MobileStudyCard({ card, isFlipped, onFlip, enableFullscreen = false, onFullscreen }) {
             const { state: { theme, settings } } = useFlashCards();
             const speechTimeoutRef = useRef(null);
             const lastCardIdRef = useRef(null);
@@ -1086,7 +1086,7 @@
                             </div>
                             
                             <div className="text-center text-sm opacity-70 flex-shrink-0 mt-6">
-                                Tap to reveal answer
+                                {enableFullscreen ? 'Tap to flip • Long press for fullscreen' : 'Tap to reveal answer'}
                             </div>
                         </div>
                         
@@ -1103,10 +1103,183 @@
                             </div>
                             
                             <div className="text-center text-sm opacity-70 flex-shrink-0 mt-6">
-                                Tap to show question
+                                {enableFullscreen ? 'Tap to flip • Long press for fullscreen' : 'Tap to show question'}
                             </div>
                         </div>
                     </div>
+                    
+                    {enableFullscreen && onFullscreen && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onFullscreen();
+                            }}
+                            className={`absolute top-4 right-4 p-2 rounded-lg ${
+                                theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
+                            } transition-colors z-10`}
+                        >
+                            🔳
+                        </button>
+                    )}
+                </div>
+            );
+        }
+
+        // Fullscreen Study Mode with Gesture Support
+        function FullscreenStudyMode({ cards, currentIndex, isFlipped, onFlip, onNavigate, onExit }) {
+            const { state: { theme, settings } } = useFlashCards();
+            const touchStartRef = useRef({ x: 0, y: 0 });
+            const touchEndRef = useRef({ x: 0, y: 0 });
+            const cardRef = useRef(null);
+            const [showHints, setShowHints] = useState(true);
+            
+            const currentCard = cards[currentIndex];
+            
+            // Hide hints after 3 seconds
+            useEffect(() => {
+                const timer = setTimeout(() => setShowHints(false), 3000);
+                return () => clearTimeout(timer);
+            }, [currentIndex]);
+            
+            // Speech effect for fullscreen mode
+            useEffect(() => {
+                SpeechService.stop();
+                
+                if (settings.speechEnabled) {
+                    setTimeout(() => {
+                        if (!isFlipped && settings.autoReadQuestion) {
+                            SpeechService.speak(currentCard.question, settings);
+                        } else if (isFlipped && settings.autoReadAnswer) {
+                            SpeechService.speak(currentCard.answer, settings);
+                        }
+                    }, 300);
+                }
+            }, [currentIndex, isFlipped, settings]);
+            
+            // Touch handlers
+            const handleTouchStart = (e) => {
+                const touch = e.touches[0];
+                touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+                setShowHints(false); // Hide hints on interaction
+            };
+            
+            const handleTouchEnd = (e) => {
+                const touch = e.changedTouches[0];
+                touchEndRef.current = { x: touch.clientX, y: touch.clientY };
+                
+                const deltaX = touchEndRef.current.x - touchStartRef.current.x;
+                const deltaY = touchEndRef.current.y - touchStartRef.current.y;
+                
+                const minSwipeDistance = 50;
+                
+                // Determine gesture type
+                if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > minSwipeDistance) {
+                    // Vertical swipe
+                    if (deltaY > 0) {
+                        // Swipe down - exit fullscreen
+                        SpeechService.stop();
+                        onExit();
+                    }
+                } else if (Math.abs(deltaX) > minSwipeDistance) {
+                    // Horizontal swipe
+                    SpeechService.stop();
+                    if (deltaX > 0) {
+                        // Swipe right - previous card
+                        if (currentIndex > 0) {
+                            onNavigate(currentIndex - 1);
+                        }
+                    } else {
+                        // Swipe left - next card
+                        if (currentIndex < cards.length - 1) {
+                            onNavigate(currentIndex + 1);
+                        }
+                    }
+                } else {
+                    // Tap - flip card
+                    SpeechService.stop();
+                    onFlip();
+                }
+            };
+            
+            return (
+                <div className={`fixed inset-0 z-50 ${
+                    theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'
+                } flex flex-col`}>
+                    {/* Header with counter */}
+                    <div className={`flex justify-between items-center p-4 ${
+                        theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                    } border-b`}>
+                        <div className="text-lg font-semibold">
+                            {currentIndex + 1} / {cards.length}
+                        </div>
+                        <button
+                            onClick={onExit}
+                            className={`p-2 rounded-lg ${
+                                theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                            }`}
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    
+                    {/* Progress bar */}
+                    <div className={`h-1 ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'}`}>
+                        <div
+                            className="h-full bg-blue-500 transition-all duration-300"
+                            style={{ width: `${((currentIndex + 1) / cards.length) * 100}%` }}
+                        />
+                    </div>
+                    
+                    {/* Main card area */}
+                    <div 
+                        ref={cardRef}
+                        className="flex-1 flex items-center justify-center p-4 perspective-1000"
+                        onTouchStart={handleTouchStart}
+                        onTouchEnd={handleTouchEnd}
+                    >
+                        <div className={`relative w-full max-w-2xl h-full transition-transform duration-500 transform-style-preserve-3d cursor-pointer ${
+                            isFlipped ? 'rotate-y-180' : ''
+                        }`}>
+                            {/* Question side */}
+                            <div className={`absolute inset-0 backface-hidden rounded-3xl p-8 flex flex-col ${
+                                theme === 'dark' 
+                                    ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
+                                    : 'bg-gradient-to-br from-white to-gray-100'
+                            } shadow-2xl`}>
+                                <div className="flex-1 overflow-y-auto flex items-center justify-center">
+                                    <div className="text-center w-full">
+                                        <h2 className="text-xl md:text-2xl font-medium leading-relaxed">
+                                            {currentCard.question}
+                                        </h2>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Answer side */}
+                            <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-3xl p-8 flex flex-col ${
+                                theme === 'dark' 
+                                    ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
+                                    : 'bg-gradient-to-br from-blue-50 to-blue-100'
+                            } shadow-2xl`}>
+                                <div className="flex-1 overflow-y-auto flex items-start justify-center">
+                                    <div className="text-center w-full">
+                                        <h2 className="text-xl md:text-2xl font-medium leading-relaxed whitespace-pre-line">
+                                            {currentCard.answer}
+                                        </h2>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Gesture hints */}
+                    {showHints && (
+                        <div className={`absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg ${
+                            theme === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-white text-gray-600'
+                        } shadow-lg text-sm text-center`}>
+                            👆 Tap to flip • ← → Swipe to navigate • ↓ Swipe down to exit
+                        </div>
+                    )}
                 </div>
             );
         }
