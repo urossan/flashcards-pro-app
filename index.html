@@ -1067,7 +1067,7 @@
             );
         }
 
-        // **NEW** Fullscreen Study Mode with Gesture Support
+        // **NEW** Fullscreen Study Mode with Gesture Support and Page Curls
         function FullscreenStudyMode({ cards, currentIndex, isFlipped, onFlip, onNavigate, onExit }) {
             const { state: { theme, settings } } = useFlashCards();
             const touchStartRef = useRef({ x: 0, y: 0 });
@@ -1075,6 +1075,8 @@
             const [showHints, setShowHints] = useState(true);
             
             const currentCard = cards[currentIndex];
+            const hasNext = currentIndex < cards.length - 1;
+            const hasPrev = currentIndex > 0;
             
             // Hide hints after 3 seconds
             useEffect(() => {
@@ -1173,7 +1175,7 @@
                     
                     {/* Main card area */}
                     <div 
-                        className="flex-1 flex items-center justify-center p-4 perspective-1000"
+                        className="flex-1 flex items-center justify-center p-4 perspective-1000 relative"
                         onTouchStart={handleTouchStart}
                         onTouchEnd={handleTouchEnd}
                     >
@@ -1185,7 +1187,7 @@
                                 theme === 'dark' 
                                     ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
                                     : 'bg-gradient-to-br from-white to-gray-100'
-                            } shadow-2xl`}>
+                            } shadow-2xl overflow-hidden`}>
                                 <div className="flex-1 overflow-y-auto flex items-center justify-center">
                                     <div className="text-center w-full">
                                         <h2 className="text-xl md:text-2xl font-medium leading-relaxed">
@@ -1193,21 +1195,102 @@
                                         </h2>
                                     </div>
                                 </div>
+                                
+                                {/* Page curl corners for question side */}
+                                {hasPrev && (
+                                    <div className="absolute bottom-0 left-0 w-12 h-12">
+                                        <div className={`absolute bottom-0 left-0 w-0 h-0 border-l-12 border-b-12 ${
+                                            theme === 'dark' 
+                                                ? 'border-l-gray-700 border-b-gray-600' 
+                                                : 'border-l-gray-300 border-b-gray-200'
+                                        } shadow-lg`} style={{
+                                            borderLeftWidth: '48px',
+                                            borderBottomWidth: '48px',
+                                            borderLeftColor: theme === 'dark' ? '#374151' : '#d1d5db',
+                                            borderBottomColor: theme === 'dark' ? '#4b5563' : '#e5e7eb'
+                                        }}></div>
+                                        <div className="absolute bottom-1 left-1 text-xs font-bold text-gray-600 dark:text-gray-300">
+                                            {currentIndex}
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {hasNext && (
+                                    <div className="absolute bottom-0 right-0 w-12 h-12">
+                                        <div className={`absolute bottom-0 right-0 w-0 h-0 border-r-12 border-b-12 ${
+                                            theme === 'dark' 
+                                                ? 'border-r-gray-700 border-b-gray-600' 
+                                                : 'border-r-gray-300 border-b-gray-200'
+                                        } shadow-lg`} style={{
+                                            borderRightWidth: '48px',
+                                            borderBottomWidth: '48px',
+                                            borderRightColor: theme === 'dark' ? '#374151' : '#d1d5db',
+                                            borderBottomColor: theme === 'dark' ? '#4b5563' : '#e5e7eb'
+                                        }}></div>
+                                        <div className="absolute bottom-1 right-1 text-xs font-bold text-gray-600 dark:text-gray-300">
+                                            {currentIndex + 2}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                             
                             {/* Answer side */}
                             <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-3xl p-8 flex flex-col ${
                                 theme === 'dark' 
-                                    ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
-                                    : 'bg-gradient-to-br from-blue-50 to-blue-100'
-                            } shadow-2xl`}>
-                                <div className="flex-1 overflow-y-auto flex items-start justify-center">
+                                    ? 'bg-gradient-to-br from-purple-900 to-indigo-900 text-white' 
+                                    : 'bg-gradient-to-br from-purple-50 to-indigo-100'
+                            } shadow-2xl overflow-hidden`}>
+                                {/* Barely visible ANSWER label at top */}
+                                <div className="text-center mb-4">
+                                    <div className="text-lg font-light opacity-20 tracking-widest">
+                                        ANSWER
+                                    </div>
+                                </div>
+                                
+                                <div className="flex-1 overflow-y-auto flex items-center justify-center">
                                     <div className="text-center w-full">
                                         <h2 className="text-xl md:text-2xl font-medium leading-relaxed whitespace-pre-line">
                                             {currentCard.answer}
                                         </h2>
                                     </div>
                                 </div>
+                                
+                                {/* Page curl corners for answer side */}
+                                {hasPrev && (
+                                    <div className="absolute bottom-0 left-0 w-12 h-12">
+                                        <div className={`absolute bottom-0 left-0 w-0 h-0 border-l-12 border-b-12 ${
+                                            theme === 'dark' 
+                                                ? 'border-l-purple-800 border-b-purple-700' 
+                                                : 'border-l-purple-200 border-b-purple-100'
+                                        } shadow-lg`} style={{
+                                            borderLeftWidth: '48px',
+                                            borderBottomWidth: '48px',
+                                            borderLeftColor: theme === 'dark' ? '#6b21a8' : '#e9d5ff',
+                                            borderBottomColor: theme === 'dark' ? '#7c3aed' : '#f3e8ff'
+                                        }}></div>
+                                        <div className="absolute bottom-1 left-1 text-xs font-bold text-purple-600 dark:text-purple-300">
+                                            {currentIndex}
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {hasNext && (
+                                    <div className="absolute bottom-0 right-0 w-12 h-12">
+                                        <div className={`absolute bottom-0 right-0 w-0 h-0 border-r-12 border-b-12 ${
+                                            theme === 'dark' 
+                                                ? 'border-r-purple-800 border-b-purple-700' 
+                                                : 'border-r-purple-200 border-b-purple-100'
+                                        } shadow-lg`} style={{
+                                            borderRightWidth: '48px',
+                                            borderBottomWidth: '48px',
+                                            borderRightColor: theme === 'dark' ? '#6b21a8' : '#e9d5ff',
+                                            borderBottomColor: theme === 'dark' ? '#7c3aed' : '#f3e8ff'
+                                        }}></div>
+                                        <div className="absolute bottom-1 right-1 text-xs font-bold text-purple-600 dark:text-purple-300">
+                                            {currentIndex + 2}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
