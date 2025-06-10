@@ -1078,6 +1078,9 @@
             const hasNext = currentIndex < cards.length - 1;
             const hasPrev = currentIndex > 0;
             
+            // Clean question text by removing Q1), Q2), etc.
+            const cleanQuestion = currentCard.question.replace(/^Q\d+\)\s*/, '');
+            
             // Hide hints after 3 seconds
             useEffect(() => {
                 const timer = setTimeout(() => setShowHints(false), 3000);
@@ -1091,7 +1094,7 @@
                 if (settings.speechEnabled) {
                     setTimeout(() => {
                         if (!isFlipped && settings.autoReadQuestion) {
-                            SpeechService.speak(currentCard.question, settings);
+                            SpeechService.speak(cleanQuestion, settings);
                         } else if (isFlipped && settings.autoReadAnswer) {
                             SpeechService.speak(currentCard.answer, settings);
                         }
@@ -1188,10 +1191,17 @@
                                     ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
                                     : 'bg-gradient-to-br from-white to-gray-100'
                             } shadow-2xl overflow-hidden`}>
+                                {/* Barely visible QUESTION label at top */}
+                                <div className="text-center mb-4">
+                                    <div className="text-lg font-light opacity-20 tracking-widest">
+                                        QUESTION
+                                    </div>
+                                </div>
+                                
                                 <div className="flex-1 overflow-y-auto flex items-center justify-center">
                                     <div className="text-center w-full">
                                         <h2 className="text-xl md:text-2xl font-medium leading-relaxed">
-                                            {currentCard.question}
+                                            {cleanQuestion}
                                         </h2>
                                     </div>
                                 </div>
@@ -1235,11 +1245,7 @@
                             </div>
                             
                             {/* Answer side */}
-                            <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-3xl p-8 flex flex-col ${
-                                theme === 'dark' 
-                                    ? 'bg-gradient-to-br from-purple-900 to-indigo-900 text-white' 
-                                    : 'bg-gradient-to-br from-purple-50 to-indigo-100'
-                            } shadow-2xl overflow-hidden`}>
+                            <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-3xl p-8 flex flex-col bg-black text-white shadow-2xl overflow-hidden`}>
                                 {/* Barely visible ANSWER label at top */}
                                 <div className="text-center mb-4">
                                     <div className="text-lg font-light opacity-20 tracking-widest">
@@ -1258,17 +1264,13 @@
                                 {/* Page curl corners for answer side */}
                                 {hasPrev && (
                                     <div className="absolute bottom-0 left-0 w-12 h-12">
-                                        <div className={`absolute bottom-0 left-0 w-0 h-0 border-l-12 border-b-12 ${
-                                            theme === 'dark' 
-                                                ? 'border-l-purple-800 border-b-purple-700' 
-                                                : 'border-l-purple-200 border-b-purple-100'
-                                        } shadow-lg`} style={{
+                                        <div className={`absolute bottom-0 left-0 w-0 h-0 border-l-12 border-b-12 border-l-gray-800 border-b-gray-700 shadow-lg`} style={{
                                             borderLeftWidth: '48px',
                                             borderBottomWidth: '48px',
-                                            borderLeftColor: theme === 'dark' ? '#6b21a8' : '#e9d5ff',
-                                            borderBottomColor: theme === 'dark' ? '#7c3aed' : '#f3e8ff'
+                                            borderLeftColor: '#1f2937',
+                                            borderBottomColor: '#374151'
                                         }}></div>
-                                        <div className="absolute bottom-1 left-1 text-xs font-bold text-purple-600 dark:text-purple-300">
+                                        <div className="absolute bottom-1 left-1 text-xs font-bold text-gray-300">
                                             {currentIndex}
                                         </div>
                                     </div>
@@ -1276,17 +1278,13 @@
                                 
                                 {hasNext && (
                                     <div className="absolute bottom-0 right-0 w-12 h-12">
-                                        <div className={`absolute bottom-0 right-0 w-0 h-0 border-r-12 border-b-12 ${
-                                            theme === 'dark' 
-                                                ? 'border-r-purple-800 border-b-purple-700' 
-                                                : 'border-r-purple-200 border-b-purple-100'
-                                        } shadow-lg`} style={{
+                                        <div className={`absolute bottom-0 right-0 w-0 h-0 border-r-12 border-b-12 border-r-gray-800 border-b-gray-700 shadow-lg`} style={{
                                             borderRightWidth: '48px',
                                             borderBottomWidth: '48px',
-                                            borderRightColor: theme === 'dark' ? '#6b21a8' : '#e9d5ff',
-                                            borderBottomColor: theme === 'dark' ? '#7c3aed' : '#f3e8ff'
+                                            borderRightColor: '#1f2937',
+                                            borderBottomColor: '#374151'
                                         }}></div>
-                                        <div className="absolute bottom-1 right-1 text-xs font-bold text-purple-600 dark:text-purple-300">
+                                        <div className="absolute bottom-1 right-1 text-xs font-bold text-gray-300">
                                             {currentIndex + 2}
                                         </div>
                                     </div>
