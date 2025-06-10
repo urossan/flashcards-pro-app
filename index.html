@@ -271,8 +271,20 @@
 
         // Study Card with Speech
         function MobileStudyCard({ card, isFlipped, onFlip }) {
-            const { state: { theme } } = useFlashCards();
+            const { state: { theme, autoReadEnabled } } = useFlashCards();
             const [isSpeaking, setIsSpeaking] = useState(false);
+            
+            // Auto-read when card loads or flips
+            useEffect(() => {
+                if (autoReadEnabled && SpeechService.isSupported()) {
+                    setIsSpeaking(true);
+                    const text = isFlipped ? card.answer : card.question;
+                    const utterance = SpeechService.speak(text);
+                    if (utterance) {
+                        utterance.onend = () => setIsSpeaking(false);
+                    }
+                }
+            }, [card.id, isFlipped, autoReadEnabled]);
             
             const handleSpeak = (e) => {
                 e.stopPropagation();
@@ -345,7 +357,7 @@
 
         // Study Mode (same as before)
         function MobileStudyMode({ cards, onComplete }) {
-            const { state: { theme } } = useFlashCards();
+            const { state: { theme, autoReadEnabled }, toggleAutoRead } = useFlashCards();
             const [currentIndex, setCurrentIndex] = useState(0);
             const [isFlipped, setIsFlipped] = useState(false);
             const [results, setResults] = useState({ correct: 0, incorrect: 0 });
@@ -361,6 +373,9 @@
                 } else {
                     setResults(prev => ({ ...prev, incorrect: prev.incorrect + 1 }));
                 }
+                
+                // Stop any current speech before moving to next card
+                SpeechService.stop();
                 
                 if (currentIndex < cards.length - 1) {
                     setTimeout(() => {
@@ -394,6 +409,17 @@
                         <div className="flex justify-between items-center mb-2">
                             <span className="text-sm font-medium">{currentIndex + 1} / {cards.length}</span>
                             <div className="flex items-center gap-4">
+                                {SpeechService.isSupported() && (
+                                    <button onClick={toggleAutoRead}
+                                        className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
+                                            autoReadEnabled 
+                                                ? 'bg-blue-500 text-white' 
+                                                : theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
+                                        }`}>
+                                        <Icon name={autoReadEnabled ? "speaker" : "mute"} className="w-3 h-3" />
+                                        Auto
+                                    </button>
+                                )}
                                 <div className="flex items-center gap-1">
                                     <Icon name="check" className="w-4 h-4 text-green-500" />
                                     <span className="text-sm">{results.correct}</span>
@@ -680,6 +706,7 @@
                 cardProgress: {},
                 theme: 'dark',
                 speechEnabled: true,
+                autoReadEnabled: true, // Auto-read questions and answers
             });
             
             useEffect(() => {
@@ -751,8 +778,15 @@
                 }));
             };
             
+            const toggleAutoRead = () => {
+                setState(prev => ({
+                    ...prev,
+                    autoReadEnabled: !prev.autoReadEnabled,
+                }));
+            };
+            
             const value = {
-                state, addCard, importCards, updateCard, deleteCard, addStudySession, toggleTheme
+                state, addCard, importCards, updateCard, deleteCard, addStudySession, toggleTheme, toggleAutoRead
             };
             
             return React.createElement(FlashCardsContext.Provider, { value }, children);
@@ -760,8 +794,8 @@
 
         // Main App Component
         function MobileFlashCardsApp() {
-            const { state, toggleTheme, addCard, importCards, updateCard, deleteCard, addStudySession } = useFlashCards();
-            const { theme, cards, categories } = state;
+            const { state, toggleTheme, toggleAutoRead, addCard, importCards, updateCard, deleteCard, addStudySession } = useFlashCards();
+            const { theme, cards, categories, autoReadEnabled } = state;
             
             const [activeView, setActiveView] = useState('cards');
             const [searchQuery, setSearchQuery] = useState('');
@@ -861,6 +895,15 @@
                                     <Icon name="upload" className="w-4 h-4" />
                                     Import Questions
                                 </button>
+                                {SpeechService.isSupported() && (
+                                    <button onClick={() => { toggleAutoRead(); setShowMenu(false); }}
+                                        className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
+                                            theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                                        }`}>
+                                        <Icon name={autoReadEnabled ? "speaker" : "mute"} className="w-4 h-4" />
+                                        Auto-Read: {autoReadEnabled ? 'ON' : 'OFF'}
+                                    </button>
+                                )}
                                 <button onClick={() => { StorageService.exportData(state); setShowMenu(false); }}
                                     className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
                                         theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
@@ -943,9 +986,16 @@
                                 
                                 {SpeechService.isSupported() && (
                                     <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'} text-center`}>
-                                        <Icon name="speaker" className="w-8 h-8 mx-auto mb-2 text-blue-500" />
-                                        <p className="text-sm text-gray-500">Speech synthesis supported! 🎤</p>
-                                        <p className="text-xs text-gray-400 mt-1">Questions and answers can be read aloud</p>
+                                        <Icon name={autoReadEnabled ? "speaker" : "mute"} className="w-8 h-8 mx-auto mb-2 text-blue-500" />
+                                        <p className="text-sm text-gray-500">
+                                            Auto-Read: {autoReadEnabled ? 'ON' : 'OFF'} 🎤
+                                        </p>
+                                        <p className="text-xs text-gray-400 mt-1">
+                                            {autoReadEnabled 
+                                                ? 'Questions & answers read automatically' 
+                                                : 'Click speaker icons to hear audio'
+                                            }
+                                        </p>
                                     </div>
                                 )}
                             </div>
