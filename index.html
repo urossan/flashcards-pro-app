@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1f2937">
-    <title>Flash Cards Pro</title>
-    <link rel="manifest" href="manifest.json">
+    <title>Flash Cards Pro - Gesture Edition</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -64,7 +63,7 @@
             }, icons[name] || "📝");
         };
 
-        // Enhanced Text-to-Speech Service with better cancellation and state management
+        // Enhanced Text-to-Speech Service
         class SpeechService {
             static currentUtterance = null;
             static isPlaying = false;
@@ -72,7 +71,7 @@
             static speak(text, settings = {}) {
                 if (!('speechSynthesis' in window) || !settings.speechEnabled) return;
                 
-                // Always cancel any ongoing speech first - critical for preventing race conditions
+                // Always cancel any ongoing speech first
                 this.stop();
                 
                 const utterance = new SpeechSynthesisUtterance(text);
@@ -112,33 +111,10 @@
             
             static stop() {
                 if ('speechSynthesis' in window) {
-                    // Cancel all speech
                     window.speechSynthesis.cancel();
-                    
-                    // Reset our tracking variables
                     this.currentUtterance = null;
                     this.isPlaying = false;
                 }
-            }
-            
-            static pause() {
-                if ('speechSynthesis' in window && this.isPlaying) {
-                    window.speechSynthesis.pause();
-                }
-            }
-            
-            static resume() {
-                if ('speechSynthesis' in window) {
-                    window.speechSynthesis.resume();
-                }
-            }
-            
-            static getStatus() {
-                return {
-                    isPlaying: this.isPlaying,
-                    isPaused: window.speechSynthesis?.paused || false,
-                    currentUtterance: this.currentUtterance
-                };
             }
         }
 
@@ -152,7 +128,7 @@
 
         // Storage Service
         class StorageService {
-            static STORAGE_KEY = 'flashcards-pro-enhanced';
+            static STORAGE_KEY = 'flashcards-pro-gestures';
             
             static save(state) {
                 try {
@@ -177,7 +153,7 @@
             
             static exportData(state) {
                 const data = {
-                    version: '3.0',
+                    version: '4.0-gestures',
                     exported: new Date().toISOString(),
                     ...state,
                     categories: Array.from(state.categories),
@@ -187,7 +163,7 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `flashcards-pro-${new Date().toISOString().split('T')[0]}.json`;
+                a.download = `flashcards-gestures-${new Date().toISOString().split('T')[0]}.json`;
                 a.click();
                 URL.revokeObjectURL(url);
             }
@@ -237,9 +213,7 @@
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i].trim();
                     
-                    // Check if this is a question line (starts with Q followed by number)
                     if (line.match(/^Q\d+\)/)) {
-                        // Save previous card if exists
                         if (currentQuestion && currentAnswer) {
                             cards.push({
                                 id: questionNumber.toString(),
@@ -269,14 +243,7 @@
                         isAnswer = true;
                         currentAnswer = line.replace('Answer:', '').trim();
                     } else if (line.length > 0) {
-                        // If we see the next question coming, but haven't found "Answer:", 
-                        // assume everything after the question is the answer
-                        const nextLineIndex = i + 1;
-                        const isNextLineQuestion = nextLineIndex < lines.length && 
-                            lines[nextLineIndex].trim().match(/^Q\d+\)/);
-                        
                         if (!isAnswer && currentQuestion && !line.match(/^Q\d+\)/)) {
-                            // This might be the start of an answer without "Answer:" prefix
                             isAnswer = true;
                             currentAnswer = line;
                         } else if (isAnswer) {
@@ -287,7 +254,6 @@
                     }
                 }
                 
-                // Don't forget the last card
                 if (currentQuestion && currentAnswer) {
                     cards.push({
                         id: questionNumber.toString(),
@@ -313,7 +279,7 @@
             }
         }
 
-        // Card Data - All 73 Questions from your file (Q1-Q73)
+        // Card Data - All 73 Questions
         const createDefaultCards = () => [
             {
                 id: '1',
@@ -462,7 +428,7 @@
             {
                 id: '19',
                 question: 'Q19) If radios are to be used during the lifting operations, what FIVE actions and checks must be made before use?',
-                answer: '1. Check if people involved know how to use them\n2. Check if batteries will last for the duration of the operation or spare batteries are supplied\n3. Check if all involved in the lifting are on the same frequency (channel)\n4. Check if the frequency is clear from other interferences',
+                answer: '1. Check if people involved know how to use them\n2. Check if batteries will last for the duration of the operation or spare batteries are supplied\n3. Check if all involved in the lifting are on the same frequency (channel)\n4. Check if the signal strength is sufficient\n5. Check if the frequency is clear from other interferences',
                 category: 'Theory Questions',
                 tags: ['radios', 'communication', 'checks'],
                 difficulty: 'hard'
@@ -992,8 +958,8 @@
             );
         }
 
-        // Enhanced Mobile Study Card with simplified, reliable speech
-        function MobileStudyCard({ card, isFlipped, onFlip, enableFullscreen = false, onFullscreen }) {
+        // Mobile Study Card
+        function MobileStudyCard({ card, isFlipped, onFlip }) {
             const { state: { theme, settings } } = useFlashCards();
             const speechTimeoutRef = useRef(null);
             const lastCardIdRef = useRef(null);
@@ -1008,41 +974,33 @@
                 }
             }, []);
             
-            // Speech effect - simplified and more predictable
+            // Speech effect
             useEffect(() => {
-                // Always clear speech first
                 clearSpeech();
                 
-                // Only start speech if enabled
                 if (!settings.speechEnabled) return;
                 
-                // Determine if this is a card change vs flip
                 const isCardChange = lastCardIdRef.current !== card.id;
                 const isFlipChange = lastFlippedRef.current !== isFlipped;
                 
-                // Update refs immediately
                 lastCardIdRef.current = card.id;
                 lastFlippedRef.current = isFlipped;
                 
-                // For card changes, ALWAYS start with question (ignore flip state initially)
                 if (isCardChange) {
                     if (settings.autoReadQuestion) {
                         speechTimeoutRef.current = setTimeout(() => {
-                            // Only read question if we're still on same card and showing question
                             if (lastCardIdRef.current === card.id && !isFlipped) {
                                 SpeechService.speak(card.question, settings);
                             }
                             speechTimeoutRef.current = null;
                         }, 300);
                     }
-                    return; // Exit early for card changes
+                    return;
                 }
                 
-                // For flip changes only
                 if (isFlipChange) {
-                    const delay = 500; // Consistent delay for flips
+                    const delay = 500;
                     speechTimeoutRef.current = setTimeout(() => {
-                        // Validate we're still in the same state
                         if (lastCardIdRef.current === card.id && lastFlippedRef.current === isFlipped) {
                             if (isFlipped && settings.autoReadAnswer) {
                                 SpeechService.speak(card.answer, settings);
@@ -1055,7 +1013,6 @@
                 }
             }, [card.id, isFlipped, settings.speechEnabled, settings.autoReadQuestion, settings.autoReadAnswer, clearSpeech]);
             
-            // Cleanup on unmount
             useEffect(() => {
                 return () => {
                     clearSpeech();
@@ -1063,7 +1020,6 @@
             }, [clearSpeech]);
             
             const handleCardClick = () => {
-                // Immediately stop any speech when user interacts
                 clearSpeech();
                 onFlip();
             };
@@ -1086,7 +1042,7 @@
                             </div>
                             
                             <div className="text-center text-sm opacity-70 flex-shrink-0 mt-6">
-                                {enableFullscreen ? 'Tap to flip • Long press for fullscreen' : 'Tap to reveal answer'}
+                                Tap to reveal answer
                             </div>
                         </div>
                         
@@ -1103,34 +1059,19 @@
                             </div>
                             
                             <div className="text-center text-sm opacity-70 flex-shrink-0 mt-6">
-                                {enableFullscreen ? 'Tap to flip • Long press for fullscreen' : 'Tap to show question'}
+                                Tap to show question
                             </div>
                         </div>
                     </div>
-                    
-                    {enableFullscreen && onFullscreen && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onFullscreen();
-                            }}
-                            className={`absolute top-4 right-4 p-2 rounded-lg ${
-                                theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
-                            } transition-colors z-10`}
-                        >
-                            🔳
-                        </button>
-                    )}
                 </div>
             );
         }
 
-        // Fullscreen Study Mode with Gesture Support
+        // **NEW** Fullscreen Study Mode with Gesture Support
         function FullscreenStudyMode({ cards, currentIndex, isFlipped, onFlip, onNavigate, onExit }) {
             const { state: { theme, settings } } = useFlashCards();
             const touchStartRef = useRef({ x: 0, y: 0 });
             const touchEndRef = useRef({ x: 0, y: 0 });
-            const cardRef = useRef(null);
             const [showHints, setShowHints] = useState(true);
             
             const currentCard = cards[currentIndex];
@@ -1156,11 +1097,11 @@
                 }
             }, [currentIndex, isFlipped, settings]);
             
-            // Touch handlers
+            // Touch handlers for gestures
             const handleTouchStart = (e) => {
                 const touch = e.touches[0];
                 touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-                setShowHints(false); // Hide hints on interaction
+                setShowHints(false);
             };
             
             const handleTouchEnd = (e) => {
@@ -1232,7 +1173,6 @@
                     
                     {/* Main card area */}
                     <div 
-                        ref={cardRef}
                         className="flex-1 flex items-center justify-center p-4 perspective-1000"
                         onTouchStart={handleTouchStart}
                         onTouchEnd={handleTouchEnd}
@@ -1276,7 +1216,7 @@
                     {showHints && (
                         <div className={`absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg ${
                             theme === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-white text-gray-600'
-                        } shadow-lg text-sm text-center`}>
+                        } shadow-lg text-sm text-center opacity-90`}>
                             👆 Tap to flip • ← → Swipe to navigate • ↓ Swipe down to exit
                         </div>
                     )}
@@ -1284,7 +1224,7 @@
             );
         }
 
-        // Enhanced Study Mode Component with Fullscreen Support
+        // **NEW** Enhanced Study Mode with Fullscreen Support
         function MobileStudyMode({ cards, onComplete }) {
             const { state: { theme } } = useFlashCards();
             const [currentIndex, setCurrentIndex] = useState(0);
@@ -1296,23 +1236,19 @@
             const currentCard = cards[currentIndex];
             const progress = ((currentIndex + 1) / cards.length) * 100;
             
-            // Stop speech when component unmounts or session ends
             useEffect(() => {
                 return () => {
                     SpeechService.stop();
                 };
             }, []);
             
-            // Stop speech when session completes
             useEffect(() => {
                 if (showCompletePrompt) {
                     SpeechService.stop();
                 }
             }, [showCompletePrompt]);
             
-            // Ensure clean start for each new card
             useEffect(() => {
-                // Stop any ongoing speech when card changes
                 SpeechService.stop();
             }, [currentIndex]);
             
@@ -1323,7 +1259,7 @@
             const handleNavigate = (newIndex) => {
                 if (newIndex >= 0 && newIndex < cards.length) {
                     setCurrentIndex(newIndex);
-                    setIsFlipped(false); // Always start with question
+                    setIsFlipped(false);
                 }
             };
             
@@ -1331,7 +1267,6 @@
                 if (currentIndex < cards.length - 1) {
                     handleNavigate(currentIndex + 1);
                 } else {
-                    // End of cards
                     setShowCompletePrompt(true);
                 }
             };
@@ -1340,7 +1275,7 @@
                 const duration = Math.floor((Date.now() - startTime) / 1000);
                 SpeechService.stop();
                 onComplete({ 
-                    correct: cards.length, // Simple completion count for now
+                    correct: cards.length,
                     incorrect: 0, 
                     duration 
                 });
@@ -1365,7 +1300,7 @@
                 );
             }
             
-            // Fullscreen mode
+            // **FULLSCREEN MODE**
             if (isFullscreen) {
                 return (
                     <FullscreenStudyMode
@@ -1386,9 +1321,10 @@
                             <span className="text-sm font-medium">
                                 Question {currentIndex + 1} of {cards.length}
                             </span>
+                            {/* **FULLSCREEN BUTTON** */}
                             <button
                                 onClick={handleFullscreen}
-                                className={`px-3 py-1 rounded-lg text-sm ${
+                                className={`px-3 py-1 rounded-lg text-sm font-medium ${
                                     theme === 'dark' 
                                         ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
                                         : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
@@ -1412,8 +1348,6 @@
                             card={currentCard}
                             isFlipped={isFlipped}
                             onFlip={handleFlip}
-                            enableFullscreen={true}
-                            onFullscreen={handleFullscreen}
                         />
                     </div>
                     
@@ -1712,7 +1646,6 @@
                     }
                 }));
                 
-                // Stop any ongoing speech when disabling
                 if (state.settings.speechEnabled) {
                     SpeechService.stop();
                 }
@@ -1748,7 +1681,6 @@
             
             const fileInputRef = React.useRef(null);
             
-            // Stop speech when changing views or exiting study mode
             useEffect(() => {
                 if (activeView !== 'study' || !isStudying) {
                     SpeechService.stop();
@@ -1765,7 +1697,7 @@
                     `Are you sure you want to delete ALL ${cards.length} cards?\n\nThis action cannot be undone and will also clear all your study progress.`
                 );
                 if (confirmed) {
-                    SpeechService.stop(); // Stop speech before clearing
+                    SpeechService.stop();
                     clearAllCards();
                     setShowMenu(false);
                     alert('All cards have been cleared. You now have a clean slate!');
@@ -1787,7 +1719,6 @@
                     }
                 );
                 
-                // Reset file input
                 event.target.value = '';
             };
             
@@ -1817,13 +1748,13 @@
             };
             
             const startStudyingCard = (card) => {
-                SpeechService.stop(); // Stop any ongoing speech
+                SpeechService.stop();
                 setIsStudying(true);
                 setActiveView('study');
             };
             
             const handleViewChange = (newView) => {
-                SpeechService.stop(); // Stop speech when changing views
+                SpeechService.stop();
                 setActiveView(newView);
                 setIsStudying(false);
             };
@@ -1946,7 +1877,6 @@
                         </div>
                     )}
                     
-                    {/* Hidden file input for import */}
                     <input
                         ref={fileInputRef}
                         type="file"
@@ -2182,17 +2112,6 @@
 
         // Render the app
         ReactDOM.render(React.createElement(App), document.getElementById('root'));
-    </script>
-
-    <script>
-        // Service worker registration (optional for PWA features)
-        if ('serviceWorker' in navigator && !window.location.protocol.startsWith('file:')) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then((registration) => console.log('SW registered: ', registration))
-                    .catch((registrationError) => console.log('SW registration failed: ', registrationError));
-            });
-        }
     </script>
 </body>
 </html>
