@@ -1,0 +1,30 @@
+{
+  "name": "Flash Cards Pro",
+  "short_name": "FlashCards",
+  "description": "Advanced flashcard study app with spaced repetition",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1f2937",
+  "theme_color": "#1f2937",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233b82f6'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>🎯</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233b82f6'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>🎯</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "screenshots": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 390 844'><rect width='390' height='844' fill='%231f2937'/><text x='195' y='422' font-size='24' text-anchor='middle' fill='white'>Flash Cards Pro</text></svg>",
+      "sizes": "390x844",
+      "type": "image/svg+xml"
+    }
+  ]
+}
