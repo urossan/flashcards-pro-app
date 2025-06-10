@@ -4,9 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1f2937">
-    <title>Flash Cards Pro</title>
-    <link rel="manifest" href="manifest.json">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+    <title>Flash Cards Pro - Crane Operations</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏗️</text></svg>">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -24,9 +23,7 @@
             overflow-x: hidden; 
             font-family: system-ui, -apple-system, sans-serif;
         }
-        #root {
-            min-height: 100vh;
-        }
+        #root { min-height: 100vh; }
         .perspective-1000 { perspective: 1000px; }
         .transform-style-preserve-3d { transform-style: preserve-3d; }
         .backface-hidden { backface-visibility: hidden; }
@@ -41,23 +38,27 @@
         @media screen and (max-width: 768px) { 
             input, textarea, select { font-size: 16px !important; } 
         }
+        .speaking { animation: pulse 1s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
     
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useCallback, createContext, useContext } = React;
+        const { useState, useEffect, useMemo, createContext, useContext } = React;
 
         // Simple Icons
         const Icon = ({ name, className = "w-5 h-5" }) => {
             const icons = {
                 search: "🔍", plus: "➕", moon: "🌙", sun: "☀️", menu: "☰",
                 cards: "🎴", study: "📚", stats: "📊", edit: "✏️", delete: "🗑️",
-                check: "✅", x: "❌", clock: "⏰", volume: "🔊", brain: "🧠",
-                zap: "⚡", target: "🎯", trend: "📈"
+                check: "✅", x: "❌", brain: "🧠", crane: "🏗️", upload: "📁",
+                speaker: "🔊", mute: "🔇"
             };
-            
             return React.createElement('span', {
                 className: `inline-block ${className}`,
                 style: { fontSize: '1.2em' }
@@ -72,31 +73,115 @@
             return context;
         };
 
+        // Speech Service
+        class SpeechService {
+            static speak(text, rate = 1.0) {
+                if ('speechSynthesis' in window) {
+                    speechSynthesis.cancel(); // Stop any current speech
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.rate = rate;
+                    utterance.pitch = 1;
+                    utterance.volume = 1;
+                    speechSynthesis.speak(utterance);
+                    return utterance;
+                }
+                return null;
+            }
+            
+            static stop() {
+                if ('speechSynthesis' in window) {
+                    speechSynthesis.cancel();
+                }
+            }
+            
+            static isSupported() {
+                return 'speechSynthesis' in window;
+            }
+        }
+
+        // Import Service - FIXED to handle Q17 format
+        class ImportService {
+            static parseQuestionsFromText(text) {
+                const cards = [];
+                const questionBlocks = text.split(/\n\s*(?=Q\d+\))/);
+                
+                questionBlocks.forEach((block, index) => {
+                    if (!block.trim()) return;
+                    
+                    const lines = block.trim().split('\n');
+                    let questionText = '';
+                    let answerText = '';
+                    let inAnswer = false;
+                    let foundAnswerLine = false;
+                    
+                    lines.forEach((line, lineIndex) => {
+                        if (line.startsWith('Answer:')) {
+                            inAnswer = true;
+                            foundAnswerLine = true;
+                            answerText = line.replace('Answer:', '').trim();
+                        } else if (inAnswer) {
+                            answerText += '\n' + line.trim();
+                        } else {
+                            // Check if this line looks like an answer (starts with number/letter followed by period or closing paren)
+                            const isAnswerLine = /^\s*([0-9]+\.|\d+\)|\w\.|[IVX]+\.|\w\)|\•|\-)/i.test(line);
+                            
+                            if (isAnswerLine && !foundAnswerLine && questionText.trim()) {
+                                // This looks like an answer line but we haven't found "Answer:" yet
+                                inAnswer = true;
+                                answerText = line.trim();
+                            } else if (inAnswer) {
+                                answerText += '\n' + line.trim();
+                            } else {
+                                questionText += (questionText ? ' ' : '') + line.trim();
+                            }
+                        }
+                    });
+                    
+                    if (questionText && answerText) {
+                        // Determine difficulty
+                        let difficulty = 'medium';
+                        if (questionText.includes('a)') && questionText.includes('b)')) {
+                            difficulty = 'hard';
+                        } else if (questionText.length < 80) {
+                            difficulty = 'easy';
+                        }
+                        
+                        // Extract tags
+                        let tags = [];
+                        if (questionText.toLowerCase().includes('loler')) tags.push('LOLER');
+                        if (questionText.toLowerCase().includes('personnel')) tags.push('personnel');
+                        if (questionText.toLowerCase().includes('safety')) tags.push('safety');
+                        if (questionText.toLowerCase().includes('wind')) tags.push('wind');
+                        if (questionText.toLowerCase().includes('crane')) tags.push('crane');
+                        if (questionText.toLowerCase().includes('lift')) tags.push('lifting');
+                        
+                        cards.push({
+                            id: Date.now() + index,
+                            question: questionText.trim(),
+                            answer: answerText.trim(),
+                            category: 'Crane Operations',
+                            tags,
+                            difficulty,
+                            media: [],
+                            created: new Date().toISOString(),
+                            lastStudied: null,
+                            nextReview: null,
+                            timesStudied: 0,
+                            timesCorrect: 0,
+                            easeFactor: 2.5,
+                            interval: 0,
+                            repetitions: 0,
+                            lapses: 0,
+                        });
+                    }
+                });
+                
+                return cards;
+            }
+        }
+
         // Storage Service
         class StorageService {
-            static STORAGE_KEY = 'flashcards-pro-enhanced';
-            
-            static save(state) {
-                try {
-                    const data = { ...state, categories: Array.from(state.categories) };
-                    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
-                } catch (error) {
-                    console.error('Failed to save data:', error);
-                }
-            }
-            
-            static load() {
-                try {
-                    const data = localStorage.getItem(this.STORAGE_KEY);
-                    if (!data) return null;
-                    const parsed = JSON.parse(data);
-                    return { ...parsed, categories: new Set(parsed.categories || []) };
-                } catch (error) {
-                    console.error('Failed to load data:', error);
-                    return null;
-                }
-            }
-            
             static exportData(state) {
                 const data = {
                     version: '3.0',
@@ -104,117 +189,35 @@
                     ...state,
                     categories: Array.from(state.categories),
                 };
-                
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `flashcards-pro-${new Date().toISOString().split('T')[0]}.json`;
+                a.download = `crane-flashcards-${new Date().toISOString().split('T')[0]}.json`;
                 a.click();
                 URL.revokeObjectURL(url);
             }
         }
 
-        // Card Data
-        const createDefaultCards = () => [
-            {
-                id: '1',
-                question: 'Q1) Explain why MUST there be a safe system of work.',
-                answer: 'It is a LEGAL requirement under the HASWA 1974.',
-                category: 'Crane Operations',
-                tags: ['safety', 'legal', 'HASWA'],
-                difficulty: 'medium'
-            },
-            {
-                id: '2',
-                question: 'Q2) a) State the legislation and the regulation therein that refers to the stability of cranes and b) Which regulation states the requirement for all lifting operations to be properly planned?',
-                answer: 'a) LOLER Regulation 4\nb) LOLER Regulation 8',
-                category: 'Crane Operations',
-                tags: ['LOLER', 'legislation', 'planning'],
-                difficulty: 'medium'
-            },
-            {
-                id: '3',
-                question: 'Q3) a) State the regulation number for the lifting of persons under LOLER 1998 and b) List FIVE requirements to be within a procedure.',
-                answer: 'a) LOLER Regulation 5\nb) 1. Has suitable devices to prevent the risk of carrier falling\n2. A person trapped in any carrier can be freed\n3. The carrier has an enhanced safety coefficient suspension rope or chain\n4. The rope or chain is inspected by a competent person every working day\n5. The use of carrier clearly marked for personnel use',
-                category: 'Crane Operations',
-                tags: ['LOLER', 'personnel', 'safety'],
-                difficulty: 'hard'
-            },
-            {
-                id: '4',
-                question: 'Q4) a) What is the Factor of Safety when lifting personnel and b) What needs to be taken into account with wind speeds?',
-                answer: 'a) 2:1\nb) maximum wind speeds of 7m/s',
-                category: 'Crane Operations',
-                tags: ['safety', 'personnel', 'wind'],
-                difficulty: 'medium'
-            },
-            {
-                id: '5',
-                question: 'Q5) How does the guidance in LOLER 1998 (L 113) describe the difference between installed and positioned?',
-                answer: 'Installed – fixed in location (tower crane)\nPositioned – manoeuvred in to place (mobile crane)',
-                category: 'Crane Operations',
-                tags: ['LOLER', 'definitions', 'crane types'],
-                difficulty: 'easy'
-            },
-            {
-                id: '6',
-                question: 'Q6) a) What is the minimum recommended distance that is allowed between the counterweight(s) of any lifting equipment and an object/structure and b) What measure must be taken if the distance is less?',
-                answer: 'a) Minimum 600 mm.\nb) Prevent access',
-                category: 'Crane Operations',
-                tags: ['counterweight', 'distance', 'safety'],
-                difficulty: 'medium'
-            },
-            {
-                id: '7',
-                question: 'Q7) Who has overall control of the lifting operation?',
-                answer: 'The Appointed Person',
-                category: 'Crane Operations',
-                tags: ['appointed person', 'control', 'responsibility'],
-                difficulty: 'easy'
-            },
-            {
-                id: '8',
-                question: 'Q8) What IS the definition of a competent person as stated by Codes of Practice?',
-                answer: 'A person who has practical and theoretical knowledge as well as planning experience of crane and equipment.',
-                category: 'Crane Operations',
-                tags: ['competent person', 'definitions', 'qualifications'],
-                difficulty: 'medium'
-            },
-            {
-                id: '9',
-                question: 'Q9) Which part of BS 7121 is specific to mobile cranes?',
-                answer: 'Sections 2-3',
-                category: 'Crane Operations',
-                tags: ['BS 7121', 'mobile cranes', 'standards'],
-                difficulty: 'easy'
-            },
-            {
-                id: '10',
-                question: 'Q10) When a crane company hires out a crane, name TWO main legal requirements the hire company must meet regarding the crane and operator.',
-                answer: '1. A competent trained operator\n2. Correct and up-to-date certification',
-                category: 'Crane Operations',
-                tags: ['hire', 'legal requirements', 'operator'],
-                difficulty: 'medium'
-            }
-        ].map(card => ({
-            ...card,
-            media: [],
-            created: new Date().toISOString(),
-            lastStudied: null,
-            nextReview: null,
-            timesStudied: 0,
-            timesCorrect: 0,
-            easeFactor: 2.5,
-            interval: 0,
-            repetitions: 0,
-            lapses: 0
-        }));
-
-        // Mobile Card Component
+        // Card Component with Speech
         function MobileCardItem({ card, onEdit, onDelete, onStudy }) {
             const { state: { theme } } = useFlashCards();
             const [showActions, setShowActions] = useState(false);
+            const [isSpeaking, setIsSpeaking] = useState(false);
+            
+            const handleSpeak = (e) => {
+                e.stopPropagation();
+                if (isSpeaking) {
+                    SpeechService.stop();
+                    setIsSpeaking(false);
+                } else {
+                    setIsSpeaking(true);
+                    const utterance = SpeechService.speak(`Question: ${card.question}. Answer: ${card.answer}`);
+                    if (utterance) {
+                        utterance.onend = () => setIsSpeaking(false);
+                    }
+                }
+            };
             
             return (
                 <div className={`relative mb-3 rounded-xl border transition-all cursor-pointer ${
@@ -223,89 +226,11 @@
                     <div className="p-4" onClick={() => setShowActions(!showActions)}>
                         <div className="flex justify-between items-start mb-2">
                             <h4 className="font-medium text-base leading-tight pr-2 flex-1">{card.question}</h4>
-                            <span className={`text-xs px-2 py-1 rounded flex-shrink-0 ${
-                                card.difficulty === 'easy' ? 'bg-green-500 text-white'
-                                : card.difficulty === 'medium' ? 'bg-yellow-500 text-white'
-                                : 'bg-red-500 text-white'
-                            }`}>
-                                {card.difficulty}
-                            </span>
-                        </div>
-                        
-                        <p className={`text-sm mb-3 line-clamp-2 ${
-                            theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                            {card.answer}
-                        </p>
-                        
-                        <div className="flex flex-wrap gap-1">
-                            {card.category && (
-                                <span className={`text-xs px-2 py-1 rounded ${
-                                    theme === 'dark' ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-700'
-                                }`}>
-                                    {card.category}
-                                </span>
-                            )}
-                            {card.tags.slice(0, 2).map(tag => (
-                                <span key={tag} className={`text-xs px-2 py-1 rounded ${
-                                    theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'
-                                }`}>
-                                    {tag}
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-                    
-                    <div className={`overflow-hidden transition-all duration-300 ${
-                        showActions ? 'max-h-16' : 'max-h-0'
-                    }`}>
-                        <div className={`flex border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onStudy(); }}
-                                className={`flex-1 py-3 px-4 text-sm font-medium text-blue-500 ${
-                                    theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
-                                } border-r ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}
-                            >
-                                Study
-                            </button>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                                className={`flex-1 py-3 px-4 text-sm font-medium ${
-                                    theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
-                                } border-r ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}
-                            >
-                                Edit
-                            </button>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                className={`flex-1 py-3 px-4 text-sm font-medium text-red-500 ${
-                                    theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
-                                }`}
-                            >
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        // Mobile Study Card
-        function MobileStudyCard({ card, isFlipped, onFlip }) {
-            const { state: { theme } } = useFlashCards();
-            
-            return (
-                <div className="relative w-full h-80 perspective-1000" onClick={onFlip}>
-                    <div className={`relative w-full h-full transition-transform duration-500 transform-style-preserve-3d cursor-pointer ${
-                        isFlipped ? 'rotate-y-180' : ''
-                    }`}>
-                        <div className={`absolute inset-0 backface-hidden rounded-2xl p-6 flex flex-col ${
-                            theme === 'dark' 
-                                ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
-                                : 'bg-gradient-to-br from-white to-gray-100'
-                        } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                            
-                            <div className="flex justify-between items-start mb-4">
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                                <button onClick={handleSpeak}
+                                    className={`p-1 rounded ${isSpeaking ? 'speaking text-blue-500' : 'text-gray-400 hover:text-blue-500'}`}>
+                                    <Icon name={isSpeaking ? "mute" : "speaker"} className="w-4 h-4" />
+                                </button>
                                 <span className={`text-xs px-2 py-1 rounded ${
                                     card.difficulty === 'easy' ? 'bg-green-500 text-white'
                                     : card.difficulty === 'medium' ? 'bg-yellow-500 text-white'
@@ -314,42 +239,138 @@
                                     {card.difficulty}
                                 </span>
                             </div>
-                            
-                            <div className="flex-1 flex items-center justify-center p-2">
-                                <div className="text-center">
-                                    <h2 className="text-lg font-medium mb-4 leading-relaxed">{card.question}</h2>
-                                </div>
-                            </div>
-                            
-                            <div className="text-center text-xs opacity-60">
-                                Tap to reveal answer
-                            </div>
                         </div>
-                        
-                        <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-2xl p-6 flex flex-col ${
-                            theme === 'dark' 
-                                ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
-                                : 'bg-gradient-to-br from-blue-50 to-blue-100'
-                        } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                            
-                            <div className="flex-1 flex items-center justify-center p-2">
-                                <div className="text-center">
-                                    <h2 className="text-lg font-medium leading-relaxed whitespace-pre-line">{card.answer}</h2>
-                                </div>
-                            </div>
-                            
-                            <div className="text-center text-xs opacity-60">
-                                Tap to show question
-                            </div>
+                        <p className={`text-sm mb-3 line-clamp-2 ${
+                            theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                            {card.answer}
+                        </p>
+                        {card.category && (
+                            <span className={`text-xs px-2 py-1 rounded ${
+                                theme === 'dark' ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-700'
+                            }`}>
+                                {card.category}
+                            </span>
+                        )}
+                    </div>
+                    
+                    <div className={`overflow-hidden transition-all duration-300 ${
+                        showActions ? 'max-h-16' : 'max-h-0'
+                    }`}>
+                        <div className={`flex border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                            <button onClick={(e) => { e.stopPropagation(); onStudy(); }}
+                                className={`flex-1 py-3 px-4 text-sm font-medium text-blue-500 ${
+                                    theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
+                                } border-r ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                                Study
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                                className={`flex-1 py-3 px-4 text-sm font-medium ${
+                                    theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
+                                } border-r ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                                Edit
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                className={`flex-1 py-3 px-4 text-sm font-medium text-red-500 ${
+                                    theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
+                                }`}>
+                                Delete
+                            </button>
                         </div>
                     </div>
                 </div>
             );
         }
 
-        // Study Mode Component
+        // Study Card with Speech
+        function MobileStudyCard({ card, isFlipped, onFlip }) {
+            const { state: { theme, autoReadEnabled } } = useFlashCards();
+            const [isSpeaking, setIsSpeaking] = useState(false);
+            
+            // Auto-read when card loads or flips
+            useEffect(() => {
+                if (autoReadEnabled && SpeechService.isSupported()) {
+                    setIsSpeaking(true);
+                    const text = isFlipped ? card.answer : card.question;
+                    const utterance = SpeechService.speak(text);
+                    if (utterance) {
+                        utterance.onend = () => setIsSpeaking(false);
+                    }
+                }
+            }, [card.id, isFlipped, autoReadEnabled]);
+            
+            const handleSpeak = (e) => {
+                e.stopPropagation();
+                if (isSpeaking) {
+                    SpeechService.stop();
+                    setIsSpeaking(false);
+                } else {
+                    setIsSpeaking(true);
+                    const text = isFlipped ? card.answer : card.question;
+                    const utterance = SpeechService.speak(text);
+                    if (utterance) {
+                        utterance.onend = () => setIsSpeaking(false);
+                    }
+                }
+            };
+            
+            return (
+                <div className="relative w-full h-80 perspective-1000">
+                    <div className={`relative w-full h-full transition-transform duration-500 transform-style-preserve-3d cursor-pointer ${
+                        isFlipped ? 'rotate-y-180' : ''
+                    }`}>
+                        <div className={`absolute inset-0 backface-hidden rounded-2xl p-6 flex flex-col ${
+                            theme === 'dark' 
+                                ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
+                                : 'bg-gradient-to-br from-white to-gray-100'
+                        } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`} onClick={onFlip}>
+                            <div className="flex justify-between items-start mb-4">
+                                <span className={`text-xs px-2 py-1 rounded ${
+                                    card.difficulty === 'easy' ? 'bg-green-500 text-white'
+                                    : card.difficulty === 'medium' ? 'bg-yellow-500 text-white'
+                                    : 'bg-red-500 text-white'
+                                }`}>
+                                    {card.difficulty}
+                                </span>
+                                <button onClick={handleSpeak}
+                                    className={`p-2 rounded-lg ${isSpeaking ? 'speaking text-blue-500' : 'text-gray-400 hover:text-blue-500'}`}>
+                                    <Icon name={isSpeaking ? "mute" : "speaker"} className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="flex-1 flex items-center justify-center p-2">
+                                <div className="text-center">
+                                    <h2 className="text-lg font-medium mb-4 leading-relaxed">{card.question}</h2>
+                                </div>
+                            </div>
+                            <div className="text-center text-xs opacity-60">Tap to reveal answer</div>
+                        </div>
+                        
+                        <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-2xl p-6 flex flex-col ${
+                            theme === 'dark' 
+                                ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
+                                : 'bg-gradient-to-br from-blue-50 to-blue-100'
+                        } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`} onClick={onFlip}>
+                            <div className="flex justify-end mb-4">
+                                <button onClick={handleSpeak}
+                                    className={`p-2 rounded-lg ${isSpeaking ? 'speaking text-blue-300' : 'text-gray-400 hover:text-blue-300'}`}>
+                                    <Icon name={isSpeaking ? "mute" : "speaker"} className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="flex-1 flex items-center justify-center p-2">
+                                <div className="text-center">
+                                    <h2 className="text-lg font-medium leading-relaxed whitespace-pre-line">{card.answer}</h2>
+                                </div>
+                            </div>
+                            <div className="text-center text-xs opacity-60">Tap to show question</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Study Mode (same as before)
         function MobileStudyMode({ cards, onComplete }) {
-            const { state: { theme } } = useFlashCards();
+            const { state: { theme, autoReadEnabled }, toggleAutoRead } = useFlashCards();
             const [currentIndex, setCurrentIndex] = useState(0);
             const [isFlipped, setIsFlipped] = useState(false);
             const [results, setResults] = useState({ correct: 0, incorrect: 0 });
@@ -365,6 +386,9 @@
                 } else {
                     setResults(prev => ({ ...prev, incorrect: prev.incorrect + 1 }));
                 }
+                
+                // Stop any current speech before moving to next card
+                SpeechService.stop();
                 
                 if (currentIndex < cards.length - 1) {
                     setTimeout(() => {
@@ -396,10 +420,19 @@
                 <div className="space-y-4 pb-6">
                     <div className="p-4 rounded-xl">
                         <div className="flex justify-between items-center mb-2">
-                            <span className="text-sm font-medium">
-                                {currentIndex + 1} / {cards.length}
-                            </span>
+                            <span className="text-sm font-medium">{currentIndex + 1} / {cards.length}</span>
                             <div className="flex items-center gap-4">
+                                {SpeechService.isSupported() && (
+                                    <button onClick={toggleAutoRead}
+                                        className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
+                                            autoReadEnabled 
+                                                ? 'bg-blue-500 text-white' 
+                                                : theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
+                                        }`}>
+                                        <Icon name={autoReadEnabled ? "speaker" : "mute"} className="w-3 h-3" />
+                                        Auto
+                                    </button>
+                                )}
                                 <div className="flex items-center gap-1">
                                     <Icon name="check" className="w-4 h-4 text-green-500" />
                                     <span className="text-sm">{results.correct}</span>
@@ -413,42 +446,30 @@
                         <div className={`h-2 rounded-full overflow-hidden ${
                             theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
                         }`}>
-                            <div
-                                className="h-full bg-blue-500 transition-all duration-500"
-                                style={{ width: `${progress}%` }}
-                            />
+                            <div className="h-full bg-blue-500 transition-all duration-500"
+                                style={{ width: `${progress}%` }} />
                         </div>
                     </div>
                     
                     <div className="px-4">
-                        <MobileStudyCard
-                            card={currentCard}
-                            isFlipped={isFlipped}
-                            onFlip={() => setIsFlipped(!isFlipped)}
-                        />
+                        <MobileStudyCard card={currentCard} isFlipped={isFlipped} onFlip={() => setIsFlipped(!isFlipped)} />
                     </div>
                     
                     <div className="px-4">
                         {isFlipped ? (
                             <div className="grid grid-cols-2 gap-3">
-                                <button
-                                    onClick={() => handleResponse(false)}
-                                    className="py-4 bg-red-500 text-white rounded-xl hover:bg-red-600 font-medium"
-                                >
+                                <button onClick={() => handleResponse(false)}
+                                    className="py-4 bg-red-500 text-white rounded-xl hover:bg-red-600 font-medium">
                                     ❌ Incorrect
                                 </button>
-                                <button
-                                    onClick={() => handleResponse(true)}
-                                    className="py-4 bg-green-500 text-white rounded-xl hover:bg-green-600 font-medium"
-                                >
+                                <button onClick={() => handleResponse(true)}
+                                    className="py-4 bg-green-500 text-white rounded-xl hover:bg-green-600 font-medium">
                                     ✅ Correct
                                 </button>
                             </div>
                         ) : (
-                            <button
-                                onClick={() => setIsFlipped(true)}
-                                className="w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 text-lg font-medium"
-                            >
+                            <button onClick={() => setIsFlipped(true)}
+                                className="w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 text-lg font-medium">
                                 Show Answer
                             </button>
                         )}
@@ -482,10 +503,8 @@
                                         </span>
                                     </div>
                                 </div>
-                                <button
-                                    onClick={handleComplete}
-                                    className="w-full py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
-                                >
+                                <button onClick={handleComplete}
+                                    className="w-full py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium">
                                     Finish Session
                                 </button>
                             </div>
@@ -495,7 +514,7 @@
             );
         }
 
-        // Card Editor
+        // Card Editor (same as before)
         function MobileCardEditor({ card, onSave, onCancel }) {
             const { state: { theme } } = useFlashCards();
             const [question, setQuestion] = useState(card?.question || '');
@@ -505,7 +524,6 @@
             
             const handleSubmit = () => {
                 if (!question.trim() || !answer.trim()) return;
-                
                 onSave({
                     question: question.trim(),
                     answer: answer.trim(),
@@ -520,70 +538,50 @@
                 <div className="space-y-6">
                     <div>
                         <label className="block text-sm font-medium mb-2">Question</label>
-                        <textarea
-                            value={question}
-                            onChange={(e) => setQuestion(e.target.value)}
+                        <textarea value={question} onChange={(e) => setQuestion(e.target.value)}
                             className={`w-full px-4 py-3 rounded-xl border ${
                                 theme === 'dark' 
                                     ? 'bg-gray-800 border-gray-700 text-white' 
                                     : 'bg-white border-gray-300'
                             } focus:outline-none focus:ring-2 focus:ring-blue-500 text-base`}
-                            rows={3}
-                            placeholder="Enter your question..."
-                            required
-                        />
+                            rows={3} placeholder="Enter your question..." required />
                     </div>
                     
                     <div>
                         <label className="block text-sm font-medium mb-2">Answer</label>
-                        <textarea
-                            value={answer}
-                            onChange={(e) => setAnswer(e.target.value)}
+                        <textarea value={answer} onChange={(e) => setAnswer(e.target.value)}
                             className={`w-full px-4 py-3 rounded-xl border ${
                                 theme === 'dark' 
                                     ? 'bg-gray-800 border-gray-700 text-white' 
                                     : 'bg-white border-gray-300'
                             } focus:outline-none focus:ring-2 focus:ring-blue-500 text-base`}
-                            rows={3}
-                            placeholder="Enter the answer..."
-                            required
-                        />
+                            rows={3} placeholder="Enter the answer..." required />
                     </div>
                     
                     <div>
                         <label className="block text-sm font-medium mb-2">Category</label>
-                        <input
-                            value={category}
-                            onChange={(e) => setCategory(e.target.value)}
+                        <input value={category} onChange={(e) => setCategory(e.target.value)}
                             className={`w-full px-4 py-3 rounded-xl border ${
                                 theme === 'dark' 
                                     ? 'bg-gray-800 border-gray-700 text-white' 
                                     : 'bg-white border-gray-300'
                             } focus:outline-none focus:ring-2 focus:ring-blue-500 text-base`}
-                            placeholder="Optional category"
-                        />
+                            placeholder="Optional category" />
                     </div>
                     
                     <div>
                         <label className="block text-sm font-medium mb-3">Difficulty</label>
                         <div className="grid grid-cols-3 gap-3">
                             {['easy', 'medium', 'hard'].map(level => (
-                                <button
-                                    key={level}
-                                    type="button"
-                                    onClick={() => setDifficulty(level)}
+                                <button key={level} type="button" onClick={() => setDifficulty(level)}
                                     className={`py-3 rounded-xl border transition-colors text-sm font-medium ${
                                         difficulty === level
-                                            ? level === 'easy'
-                                                ? 'bg-green-500 text-white border-green-500'
-                                                : level === 'medium'
-                                                ? 'bg-yellow-500 text-white border-yellow-500'
-                                                : 'bg-red-500 text-white border-red-500'
-                                            : theme === 'dark'
-                                            ? 'border-gray-700 hover:border-gray-600'
+                                            ? level === 'easy' ? 'bg-green-500 text-white border-green-500'
+                                            : level === 'medium' ? 'bg-yellow-500 text-white border-yellow-500'
+                                            : 'bg-red-500 text-white border-red-500'
+                                            : theme === 'dark' ? 'border-gray-700 hover:border-gray-600'
                                             : 'border-gray-300 hover:border-gray-400'
-                                    }`}
-                                >
+                                    }`}>
                                     {level.charAt(0).toUpperCase() + level.slice(1)}
                                 </button>
                             ))}
@@ -591,23 +589,17 @@
                     </div>
                     
                     <div className="flex gap-3 pt-4">
-                        <button
-                            type="button"
-                            onClick={onCancel}
+                        <button type="button" onClick={onCancel}
                             className={`flex-1 py-3 rounded-xl border ${
                                 theme === 'dark' 
                                     ? 'border-gray-700 hover:bg-gray-800' 
                                     : 'border-gray-300 hover:bg-gray-100'
-                            } transition-colors font-medium`}
-                        >
+                            } transition-colors font-medium`}>
                             Cancel
                         </button>
-                        <button
-                            type="button"
-                            onClick={handleSubmit}
+                        <button type="button" onClick={handleSubmit}
                             disabled={!question.trim() || !answer.trim()}
-                            className="flex-1 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-                        >
+                            className="flex-1 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">
                             {card ? 'Update' : 'Create'}
                         </button>
                     </div>
@@ -615,34 +607,120 @@
             );
         }
 
+        // Import Modal
+        function ImportModal({ onClose, onImport }) {
+            const { state: { theme } } = useFlashCards();
+            const [importText, setImportText] = useState('');
+            const [isProcessing, setIsProcessing] = useState(false);
+            
+            const handleImport = async () => {
+                if (!importText.trim()) return;
+                
+                setIsProcessing(true);
+                try {
+                    const cards = ImportService.parseQuestionsFromText(importText);
+                    if (cards.length > 0) {
+                        onImport(cards);
+                        onClose();
+                    } else {
+                        alert('No valid questions found in the text.');
+                    }
+                } catch (error) {
+                    alert('Error parsing questions: ' + error.message);
+                } finally {
+                    setIsProcessing(false);
+                }
+            };
+            
+            const handleFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (file && file.type === 'text/plain') {
+                    const reader = new FileReader();
+                    reader.onload = (e) => setImportText(e.target.result);
+                    reader.readAsText(file);
+                }
+            };
+            
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className={`w-full max-w-2xl rounded-2xl ${
+                        theme === 'dark' ? 'bg-gray-900' : 'bg-white'
+                    } p-6`}>
+                        <h2 className="text-xl font-semibold mb-6">Import Questions 📁</h2>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Upload Text File</label>
+                                <input type="file" accept=".txt" onChange={handleFileUpload}
+                                    className={`w-full px-4 py-3 rounded-xl border ${
+                                        theme === 'dark' 
+                                            ? 'bg-gray-800 border-gray-700' 
+                                            : 'bg-gray-100 border-gray-300'
+                                    } text-base`} />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Or paste questions here:</label>
+                                <textarea value={importText} onChange={(e) => setImportText(e.target.value)}
+                                    className={`w-full px-4 py-3 rounded-xl border ${
+                                        theme === 'dark' 
+                                            ? 'bg-gray-800 border-gray-700 text-white' 
+                                            : 'bg-white border-gray-300'
+                                    } focus:outline-none focus:ring-2 focus:ring-blue-500 text-base`}
+                                    rows={10} 
+                                    placeholder="Paste your questions and answers here...&#10;&#10;Format:&#10;Q1) Your question here?&#10;Answer: Your answer here&#10;&#10;Q2) Another question?&#10;Answer: Another answer" />
+                            </div>
+                            
+                            <div className="flex gap-3 pt-4">
+                                <button onClick={onClose}
+                                    className={`flex-1 py-3 rounded-xl border ${
+                                        theme === 'dark' 
+                                            ? 'border-gray-700 hover:bg-gray-800' 
+                                            : 'border-gray-300 hover:bg-gray-100'
+                                    } transition-colors font-medium`}>
+                                    Cancel
+                                </button>
+                                <button onClick={handleImport} disabled={!importText.trim() || isProcessing}
+                                    className="flex-1 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 transition-colors font-medium">
+                                    {isProcessing ? 'Processing...' : 'Import Questions'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         // Provider Component
         function FlashCardsProvider({ children }) {
-            const [state, setState] = useState(() => {
-                const saved = StorageService.load();
-                return {
-                    cards: saved?.cards || createDefaultCards(),
-                    categories: saved?.categories || new Set(['Crane Operations']),
-                    studySessions: saved?.studySessions || [],
-                    cardProgress: saved?.cardProgress || {},
-                    theme: saved?.theme || 'dark',
-                    settings: saved?.settings || {
-                        dailyGoal: 20,
-                        notificationsEnabled: false,
-                        soundEnabled: true,
-                        autoAdvance: true,
-                        studyReminders: [],
-                        speechEnabled: true,
-                        speechRate: 1.0,
-                        speechVoice: '',
-                        autoReadQuestion: false,
-                        autoReadAnswer: false,
-                    },
-                };
+            const [state, setState] = useState({
+                cards: [
+                    {
+                        id: '1',
+                        question: 'Q1) Explain why MUST there be a safe system of work.',
+                        answer: 'It is a LEGAL requirement under the HASWA 1974.',
+                        category: 'Crane Operations',
+                        tags: ['safety'],
+                        difficulty: 'medium',
+                        media: [],
+                        created: new Date().toISOString(),
+                        lastStudied: null,
+                        nextReview: null,
+                        timesStudied: 0,
+                        timesCorrect: 0,
+                        easeFactor: 2.5,
+                        interval: 0,
+                        repetitions: 0,
+                        lapses: 0,
+                    }
+                ],
+                categories: new Set(['Crane Operations']),
+                studySessions: [],
+                cardProgress: {},
+                theme: 'dark',
+                speechEnabled: true,
+                autoReadEnabled: true, // Auto-read questions and answers
             });
-            
-            useEffect(() => {
-                StorageService.save(state);
-            }, [state]);
             
             useEffect(() => {
                 document.documentElement.classList.toggle('dark', state.theme === 'dark');
@@ -662,11 +740,18 @@
                     repetitions: 0,
                     lapses: 0,
                 };
-                
                 setState(prev => ({
                     ...prev,
                     cards: [...prev.cards, newCard],
                     categories: new Set([...prev.categories, card.category].filter(Boolean)),
+                }));
+            };
+            
+            const importCards = (cards) => {
+                setState(prev => ({
+                    ...prev,
+                    cards: [...prev.cards, ...cards],
+                    categories: new Set([...prev.categories, ...cards.map(c => c.category)].filter(Boolean)),
                 }));
             };
             
@@ -706,13 +791,15 @@
                 }));
             };
             
+            const toggleAutoRead = () => {
+                setState(prev => ({
+                    ...prev,
+                    autoReadEnabled: !prev.autoReadEnabled,
+                }));
+            };
+            
             const value = {
-                state,
-                addCard,
-                updateCard,
-                deleteCard,
-                addStudySession,
-                toggleTheme,
+                state, addCard, importCards, updateCard, deleteCard, addStudySession, toggleTheme, toggleAutoRead
             };
             
             return React.createElement(FlashCardsContext.Provider, { value }, children);
@@ -720,8 +807,8 @@
 
         // Main App Component
         function MobileFlashCardsApp() {
-            const { state, toggleTheme, addCard, updateCard, deleteCard, addStudySession } = useFlashCards();
-            const { theme, cards, categories } = state;
+            const { state, toggleTheme, toggleAutoRead, addCard, importCards, updateCard, deleteCard, addStudySession } = useFlashCards();
+            const { theme, cards, categories, autoReadEnabled } = state;
             
             const [activeView, setActiveView] = useState('cards');
             const [searchQuery, setSearchQuery] = useState('');
@@ -730,16 +817,14 @@
             const [editingCard, setEditingCard] = useState(undefined);
             const [isStudying, setIsStudying] = useState(false);
             const [showMenu, setShowMenu] = useState(false);
+            const [showImportModal, setShowImportModal] = useState(false);
             
             const filteredCards = useMemo(() => {
                 return cards.filter(card => {
                     const matchesSearch = !searchQuery || 
                         card.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        card.answer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        card.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-                    
+                        card.answer.toLowerCase().includes(searchQuery.toLowerCase());
                     const matchesCategory = !selectedCategory || card.category === selectedCategory;
-                    
                     return matchesSearch && matchesCategory;
                 });
             }, [cards, searchQuery, selectedCategory]);
@@ -752,17 +837,12 @@
                     correctCount: results.correct,
                     mode: 'standard',
                 });
-                
                 setIsStudying(false);
-            };
-            
-            const startStudyingCard = (card) => {
-                setIsStudying(true);
-                setActiveView('study');
             };
             
             return (
                 <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
+                    {/* Header */}
                     <header className={`sticky top-0 z-40 ${
                         theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
                     } border-b backdrop-blur-md bg-opacity-90`}>
@@ -770,26 +850,21 @@
                             <div className="flex justify-between items-center">
                                 <h1 className="text-xl font-bold">
                                     <span className="bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
-                                        Flash Cards Pro 🎯
+                                        Crane Operations 🏗️
                                     </span>
                                 </h1>
                                 
                                 <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={toggleTheme}
+                                    <button onClick={toggleTheme}
                                         className={`p-2 rounded-lg ${
                                             theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                        }`}
-                                    >
+                                        }`}>
                                         <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
                                     </button>
-                                    
-                                    <button
-                                        onClick={() => setShowMenu(!showMenu)}
+                                    <button onClick={() => setShowMenu(!showMenu)}
                                         className={`p-2 rounded-lg ${
                                             theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                        }`}
-                                    >
+                                        }`}>
                                         <Icon name="menu" />
                                     </button>
                                 </div>
@@ -799,119 +874,86 @@
                                 <div className="mt-3">
                                     <div className="relative">
                                         <Icon name="search" className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                        <input
-                                            type="text"
-                                            value={searchQuery}
+                                        <input type="text" value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
                                             placeholder="Search cards..."
                                             className={`w-full pl-10 pr-4 py-2 rounded-xl text-base ${
                                                 theme === 'dark'
                                                     ? 'bg-gray-700 border-gray-600'
                                                     : 'bg-gray-100 border-gray-300'
-                                            } border focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                                        />
+                                            } border focus:outline-none focus:ring-2 focus:ring-blue-500`} />
                                     </div>
                                 </div>
                             )}
                         </div>
                     </header>
                     
+                    {/* Menu Dropdown */}
                     {showMenu && (
                         <div className="fixed inset-0 z-50" onClick={() => setShowMenu(false)}>
                             <div className={`absolute top-16 right-4 w-48 rounded-xl shadow-lg ${
                                 theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
                             } border overflow-hidden`}>
-                                <button
-                                    onClick={() => {
-                                        setShowCardEditor(true);
-                                        setShowMenu(false);
-                                    }}
+                                <button onClick={() => { setShowCardEditor(true); setShowMenu(false); }}
                                     className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
                                         theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                    }`}
-                                >
+                                    }`}>
                                     <Icon name="plus" className="w-4 h-4" />
                                     New Card
                                 </button>
-                                <button
-                                    onClick={() => {
-                                        StorageService.exportData(state);
-                                        setShowMenu(false);
-                                    }}
+                                <button onClick={() => { setShowImportModal(true); setShowMenu(false); }}
                                     className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
                                         theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                    }`}
-                                >
+                                    }`}>
+                                    <Icon name="upload" className="w-4 h-4" />
+                                    Import Questions
+                                </button>
+                                {SpeechService.isSupported() && (
+                                    <button onClick={() => { toggleAutoRead(); setShowMenu(false); }}
+                                        className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
+                                            theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                                        }`}>
+                                        <Icon name={autoReadEnabled ? "speaker" : "mute"} className="w-4 h-4" />
+                                        Auto-Read: {autoReadEnabled ? 'ON' : 'OFF'}
+                                    </button>
+                                )}
+                                <button onClick={() => { StorageService.exportData(state); setShowMenu(false); }}
+                                    className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
+                                        theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                                    }`}>
                                     💾 Export Data
                                 </button>
                             </div>
                         </div>
                     )}
                     
+                    {/* Main Content */}
                     <main className="px-4 py-4 pb-20">
                         {activeView === 'cards' && !isStudying && (
                             <div className="space-y-4">
-                                {categories.size > 0 && (
-                                    <div className="flex gap-2 overflow-x-auto pb-2">
-                                        <button
-                                            onClick={() => setSelectedCategory('')}
-                                            className={`px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${
-                                                !selectedCategory
-                                                    ? 'bg-blue-500 text-white'
-                                                    : theme === 'dark'
-                                                    ? 'bg-gray-800 text-gray-300'
-                                                    : 'bg-gray-200 text-gray-700'
-                                            }`}
-                                        >
-                                            All
-                                        </button>
-                                        {Array.from(categories).map(cat => (
-                                            <button
-                                                key={cat}
-                                                onClick={() => setSelectedCategory(cat)}
-                                                className={`px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${
-                                                    selectedCategory === cat
-                                                        ? 'bg-blue-500 text-white'
-                                                        : theme === 'dark'
-                                                        ? 'bg-gray-800 text-gray-300'
-                                                        : 'bg-gray-200 text-gray-700'
-                                                }`}
-                                            >
-                                                {cat}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                                
                                 {filteredCards.length === 0 ? (
                                     <div className="text-center py-12">
-                                        <Icon name="study" className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                                        <Icon name="upload" className="w-16 h-16 mx-auto mb-4 text-gray-400" />
                                         <p className="text-lg mb-2">No cards found</p>
-                                        <p className="text-gray-500 mb-4">Create your first card to get started!</p>
-                                        <button
-                                            onClick={() => setShowCardEditor(true)}
-                                            className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
-                                        >
-                                            Create Card
-                                        </button>
+                                        <p className="text-gray-500 mb-4">Import your 73 crane questions or create new cards!</p>
+                                        <div className="flex gap-3 justify-center">
+                                            <button onClick={() => setShowImportModal(true)}
+                                                className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium">
+                                                Import Questions
+                                            </button>
+                                            <button onClick={() => setShowCardEditor(true)}
+                                                className="px-6 py-3 border border-blue-500 text-blue-500 rounded-xl hover:bg-blue-50 font-medium">
+                                                Create Card
+                                            </button>
+                                        </div>
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
                                         {filteredCards.map(card => (
-                                            <MobileCardItem
-                                                key={card.id}
-                                                card={card}
-                                                onEdit={() => {
-                                                    setEditingCard(card);
-                                                    setShowCardEditor(true);
-                                                }}
-                                                onDelete={() => {
-                                                    if (confirm('Delete this card?')) {
-                                                        deleteCard(card.id);
-                                                    }
-                                                }}
-                                                onStudy={() => startStudyingCard(card)}
-                                            />
+                                            <MobileCardItem key={card.id} card={card}
+                                                onEdit={() => { setEditingCard(card); setShowCardEditor(true); }}
+                                                onDelete={() => { if (confirm('Delete this card?')) deleteCard(card.id); }}
+                                                onStudy={() => { setIsStudying(true); setActiveView('study'); }} />
                                         ))}
                                     </div>
                                 )}
@@ -921,22 +963,14 @@
                         {activeView === 'study' && !isStudying && (
                             <div className="space-y-6">
                                 <h2 className="text-2xl font-bold text-center mb-6">Ready to Study? 📚</h2>
-                                
-                                <div className={`p-6 rounded-xl ${
-                                    theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                                } text-center`}>
+                                <div className={`p-6 rounded-xl ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'} text-center`}>
                                     <Icon name="brain" className="w-12 h-12 mx-auto mb-4 text-blue-500" />
                                     <h3 className="text-lg font-semibold mb-2">Crane Operations Study</h3>
-                                    <p className={`text-sm mb-4 ${
-                                        theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                                    }`}>
-                                        Master your crane operation knowledge with these practice questions
+                                    <p className={`text-sm mb-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        Practice your crane operation knowledge with speech support
                                     </p>
-                                    <button
-                                        onClick={() => setIsStudying(true)}
-                                        disabled={filteredCards.length === 0}
-                                        className="w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
-                                    >
+                                    <button onClick={() => setIsStudying(true)} disabled={filteredCards.length === 0}
+                                        className="w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium">
                                         Start Studying ({filteredCards.length} cards)
                                     </button>
                                 </div>
@@ -944,55 +978,44 @@
                         )}
                         
                         {(activeView === 'study' || activeView === 'cards') && isStudying && (
-                            <MobileStudyMode
-                                cards={filteredCards}
-                                onComplete={handleStudyComplete}
-                            />
+                            <MobileStudyMode cards={filteredCards} onComplete={handleStudyComplete} />
                         )}
                         
                         {activeView === 'stats' && (
                             <div className="space-y-6">
                                 <h2 className="text-2xl font-bold text-center">Your Progress 📊</h2>
-                                
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className={`p-4 rounded-xl ${
-                                        theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                                    } text-center`}>
+                                    <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'} text-center`}>
                                         <div className="text-2xl font-bold text-blue-500">{cards.length}</div>
                                         <div className="text-sm text-gray-500">Total Cards</div>
                                     </div>
-                                    
-                                    <div className={`p-4 rounded-xl ${
-                                        theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                                    } text-center`}>
+                                    <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'} text-center`}>
                                         <div className="text-2xl font-bold text-green-500">
                                             {cards.filter(c => c.timesCorrect > 0).length}
                                         </div>
                                         <div className="text-sm text-gray-500">Studied Cards</div>
                                     </div>
-                                    
-                                    <div className={`p-4 rounded-xl ${
-                                        theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                                    } text-center`}>
-                                        <div className="text-2xl font-bold text-purple-500">
-                                            {Array.from(categories).length}
-                                        </div>
-                                        <div className="text-sm text-gray-500">Categories</div>
-                                    </div>
-                                    
-                                    <div className={`p-4 rounded-xl ${
-                                        theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                                    } text-center`}>
-                                        <div className="text-2xl font-bold text-yellow-500">
-                                            {state.studySessions.length}
-                                        </div>
-                                        <div className="text-sm text-gray-500">Study Sessions</div>
-                                    </div>
                                 </div>
+                                
+                                {SpeechService.isSupported() && (
+                                    <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'} text-center`}>
+                                        <Icon name={autoReadEnabled ? "speaker" : "mute"} className="w-8 h-8 mx-auto mb-2 text-blue-500" />
+                                        <p className="text-sm text-gray-500">
+                                            Auto-Read: {autoReadEnabled ? 'ON' : 'OFF'} 🎤
+                                        </p>
+                                        <p className="text-xs text-gray-400 mt-1">
+                                            {autoReadEnabled 
+                                                ? 'Questions & answers read automatically' 
+                                                : 'Click speaker icons to hear audio'
+                                            }
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </main>
                     
+                    {/* Card Editor Modal */}
                     {showCardEditor && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center p-4 z-50 overflow-y-auto">
                             <div className={`w-full max-w-lg my-8 rounded-2xl ${
@@ -1001,8 +1024,7 @@
                                 <h2 className="text-xl font-semibold mb-6">
                                     {editingCard ? 'Edit Card ✏️' : 'Create New Card ➕'}
                                 </h2>
-                                <MobileCardEditor
-                                    card={editingCard}
+                                <MobileCardEditor card={editingCard}
                                     onSave={(card) => {
                                         if (editingCard) {
                                             updateCard(editingCard.id, card);
@@ -1015,55 +1037,48 @@
                                     onCancel={() => {
                                         setShowCardEditor(false);
                                         setEditingCard(undefined);
-                                    }}
-                                />
+                                    }} />
                             </div>
                         </div>
                     )}
                     
+                    {/* Import Modal */}
+                    {showImportModal && (
+                        <ImportModal 
+                            onClose={() => setShowImportModal(false)}
+                            onImport={importCards}
+                        />
+                    )}
+                    
+                    {/* Bottom Navigation */}
                     <nav className={`fixed bottom-0 left-0 right-0 z-40 ${
                         theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
                     } border-t`}>
                         <div className="flex justify-around py-2">
-                            <button
-                                onClick={() => { 
-                                    setActiveView('cards'); 
-                                    setIsStudying(false); 
-                                }}
+                            <button onClick={() => { setActiveView('cards'); setIsStudying(false); }}
                                 className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
                                     activeView === 'cards' && !isStudying 
                                         ? 'text-blue-500' 
                                         : theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                                }`}
-                            >
+                                }`}>
                                 <Icon name="cards" className="w-6 h-6 mb-1" />
                                 <span className="text-xs">Cards</span>
                             </button>
-                            <button
-                                onClick={() => { 
-                                    setActiveView('study'); 
-                                    setIsStudying(false); 
-                                }}
+                            <button onClick={() => { setActiveView('study'); setIsStudying(false); }}
                                 className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
                                     activeView === 'study' || isStudying 
                                         ? 'text-blue-500' 
                                         : theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                                }`}
-                            >
+                                }`}>
                                 <Icon name="study" className="w-6 h-6 mb-1" />
                                 <span className="text-xs">Study</span>
                             </button>
-                            <button
-                                onClick={() => { 
-                                    setActiveView('stats'); 
-                                    setIsStudying(false); 
-                                }}
+                            <button onClick={() => { setActiveView('stats'); setIsStudying(false); }}
                                 className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
                                     activeView === 'stats' 
                                         ? 'text-blue-500' 
                                         : theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                                }`}
-                            >
+                                }`}>
                                 <Icon name="stats" className="w-6 h-6 mb-1" />
                                 <span className="text-xs">Stats</span>
                             </button>
@@ -1075,26 +1090,11 @@
 
         // Root App
         function App() {
-            return React.createElement(
-                FlashCardsProvider,
-                null,
-                React.createElement(MobileFlashCardsApp)
-            );
+            return React.createElement(FlashCardsProvider, null, React.createElement(MobileFlashCardsApp));
         }
 
         // Render the app
         ReactDOM.render(React.createElement(App), document.getElementById('root'));
-    </script>
-
-    <script>
-        // Register service worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then((registration) => console.log('SW registered: ', registration))
-                    .catch((registrationError) => console.log('SW registration failed: ', registrationError));
-            });
-        }
     </script>
 </body>
 </html>
