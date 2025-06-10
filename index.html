@@ -1067,12 +1067,14 @@
             );
         }
 
-        // **NEW** Fullscreen Study Mode with Gesture Support and Page Curls
+        // **NEW** Fullscreen Study Mode with Enhanced Animations and Gestures
         function FullscreenStudyMode({ cards, currentIndex, isFlipped, onFlip, onNavigate, onExit }) {
             const { state: { theme, settings } } = useFlashCards();
             const touchStartRef = useRef({ x: 0, y: 0 });
             const touchEndRef = useRef({ x: 0, y: 0 });
             const [showHints, setShowHints] = useState(true);
+            const [slideDirection, setSlideDirection] = useState('');
+            const [isSliding, setIsSliding] = useState(false);
             
             const currentCard = cards[currentIndex];
             const hasNext = currentIndex < cards.length - 1;
@@ -1091,7 +1093,7 @@
             useEffect(() => {
                 SpeechService.stop();
                 
-                if (settings.speechEnabled) {
+                if (settings.speechEnabled && !isSliding) {
                     setTimeout(() => {
                         if (!isFlipped && settings.autoReadQuestion) {
                             SpeechService.speak(cleanQuestion, settings);
@@ -1100,7 +1102,26 @@
                         }
                     }, 300);
                 }
-            }, [currentIndex, isFlipped, settings]);
+            }, [currentIndex, isFlipped, settings, isSliding]);
+            
+            // Enhanced navigation with slide animation
+            const handleNavigateWithAnimation = (newIndex, direction) => {
+                if (isSliding) return; // Prevent multiple animations
+                
+                setIsSliding(true);
+                setSlideDirection(direction);
+                
+                // Start slide animation
+                setTimeout(() => {
+                    onNavigate(newIndex);
+                    
+                    // Complete animation
+                    setTimeout(() => {
+                        setSlideDirection('');
+                        setIsSliding(false);
+                    }, 150); // Half of total animation time
+                }, 150);
+            };
             
             // Touch handlers for gestures
             const handleTouchStart = (e) => {
@@ -1110,6 +1131,8 @@
             };
             
             const handleTouchEnd = (e) => {
+                if (isSliding) return; // Ignore touches during animation
+                
                 const touch = e.changedTouches[0];
                 touchEndRef.current = { x: touch.clientX, y: touch.clientY };
                 
@@ -1127,17 +1150,17 @@
                         onExit();
                     }
                 } else if (Math.abs(deltaX) > minSwipeDistance) {
-                    // Horizontal swipe
+                    // Horizontal swipe with animation
                     SpeechService.stop();
                     if (deltaX > 0) {
                         // Swipe right - previous card
                         if (currentIndex > 0) {
-                            onNavigate(currentIndex - 1);
+                            handleNavigateWithAnimation(currentIndex - 1, 'right');
                         }
                     } else {
                         // Swipe left - next card
                         if (currentIndex < cards.length - 1) {
-                            onNavigate(currentIndex + 1);
+                            handleNavigateWithAnimation(currentIndex + 1, 'left');
                         }
                     }
                 } else {
@@ -1176,24 +1199,42 @@
                         />
                     </div>
                     
-                    {/* Main card area */}
+                    {/* Main card area with slide animation */}
                     <div 
-                        className="flex-1 flex items-center justify-center p-4 perspective-1000 relative"
+                        className="flex-1 flex items-center justify-center p-4 perspective-1000 relative overflow-hidden"
                         onTouchStart={handleTouchStart}
                         onTouchEnd={handleTouchEnd}
                     >
-                        <div className={`relative w-full max-w-2xl h-full transition-transform duration-500 transform-style-preserve-3d cursor-pointer ${
-                            isFlipped ? 'rotate-y-180' : ''
-                        }`}>
+                        <div 
+                            className={`relative w-full max-w-2xl h-full transition-all duration-300 ease-out transform-style-preserve-3d cursor-pointer ${
+                                isFlipped ? 'rotate-y-180 scale-105' : ''
+                            } ${
+                                slideDirection === 'left' ? 'translate-x-full opacity-0' :
+                                slideDirection === 'right' ? '-translate-x-full opacity-0' : 
+                                'translate-x-0 opacity-100'
+                            }`}
+                            style={{
+                                transform: `${isFlipped ? 'rotateY(180deg) scale(1.05)' : ''} ${
+                                    slideDirection === 'left' ? 'translateX(100%) scale(0.8)' :
+                                    slideDirection === 'right' ? 'translateX(-100%) scale(0.8)' : 
+                                    'translateX(0) scale(1)'
+                                }`,
+                                transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)'
+                            }}
+                        >
                             {/* Question side */}
                             <div className={`absolute inset-0 backface-hidden rounded-3xl p-8 flex flex-col ${
                                 theme === 'dark' 
                                     ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
                                     : 'bg-gradient-to-br from-white to-gray-100'
-                            } shadow-2xl overflow-hidden`}>
-                                {/* Barely visible QUESTION label at top */}
+                            } shadow-2xl overflow-hidden`}
+                            style={{
+                                transformStyle: 'preserve-3d',
+                                backfaceVisibility: 'hidden'
+                            }}>
+                                {/* Enhanced QUESTION label - 40% opacity */}
                                 <div className="text-center mb-4">
-                                    <div className="text-lg font-light opacity-20 tracking-widest">
+                                    <div className="text-lg font-light opacity-40 tracking-widest">
                                         QUESTION
                                     </div>
                                 </div>
@@ -1245,10 +1286,15 @@
                             </div>
                             
                             {/* Answer side */}
-                            <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-3xl p-8 flex flex-col bg-black text-white shadow-2xl overflow-hidden`}>
-                                {/* Barely visible ANSWER label at top */}
+                            <div className={`absolute inset-0 backface-hidden rounded-3xl p-8 flex flex-col bg-black text-white shadow-2xl overflow-hidden`}
+                            style={{
+                                transform: 'rotateY(180deg)',
+                                transformStyle: 'preserve-3d',
+                                backfaceVisibility: 'hidden'
+                            }}>
+                                {/* Enhanced ANSWER label - 40% opacity */}
                                 <div className="text-center mb-4">
-                                    <div className="text-lg font-light opacity-20 tracking-widest">
+                                    <div className="text-lg font-light opacity-40 tracking-widest">
                                         ANSWER
                                     </div>
                                 </div>
