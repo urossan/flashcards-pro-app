@@ -1352,6 +1352,16 @@
                 }));
             };
             
+            const clearAllCards = () => {
+                setState(prev => ({
+                    ...prev,
+                    cards: [],
+                    categories: new Set(['Theory Questions']),
+                    studySessions: [],
+                    cardProgress: {},
+                }));
+            };
+            
             const value = {
                 state,
                 addCard,
@@ -1360,6 +1370,7 @@
                 addStudySession,
                 toggleTheme,
                 importData,
+                clearAllCards,
             };
             
             return React.createElement(FlashCardsContext.Provider, { value }, children);
@@ -1367,7 +1378,7 @@
 
         // Main App Component
         function MobileFlashCardsApp() {
-            const { state, toggleTheme, addCard, updateCard, deleteCard, addStudySession, importData } = useFlashCards();
+            const { state, toggleTheme, addCard, updateCard, deleteCard, addStudySession, importData, clearAllCards } = useFlashCards();
             const { theme, cards, categories } = state;
             
             const [activeView, setActiveView] = useState('cards');
@@ -1383,6 +1394,17 @@
             const handleImport = () => {
                 fileInputRef.current?.click();
                 setShowMenu(false);
+            };
+            
+            const handleClearAll = () => {
+                const confirmed = confirm(
+                    `Are you sure you want to delete ALL ${cards.length} cards?\n\nThis action cannot be undone and will also clear all your study progress.`
+                );
+                if (confirmed) {
+                    clearAllCards();
+                    setShowMenu(false);
+                    alert('All cards have been cleared. You now have a clean slate!');
+                }
             };
             
             const handleFileChange = (event) => {
@@ -1525,6 +1547,16 @@
                                 >
                                     💾 Export Data
                                 </button>
+                                <div className={`border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                                    <button
+                                        onClick={handleClearAll}
+                                        className={`w-full px-4 py-3 text-left flex items-center gap-3 text-red-500 ${
+                                            theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                                        }`}
+                                    >
+                                        🗑️ Clear All Cards
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
