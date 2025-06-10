@@ -191,7 +191,17 @@
                         isAnswer = true;
                         currentAnswer = line.replace('Answer:', '').trim();
                     } else if (line.length > 0) {
-                        if (isAnswer) {
+                        // If we see the next question coming, but haven't found "Answer:", 
+                        // assume everything after the question is the answer
+                        const nextLineIndex = i + 1;
+                        const isNextLineQuestion = nextLineIndex < lines.length && 
+                            lines[nextLineIndex].trim().match(/^Q\d+\)/);
+                        
+                        if (!isAnswer && currentQuestion && !line.match(/^Q\d+\)/)) {
+                            // This might be the start of an answer without "Answer:" prefix
+                            isAnswer = true;
+                            currentAnswer = line;
+                        } else if (isAnswer) {
                             currentAnswer += (currentAnswer ? '\n' : '') + line;
                         } else {
                             currentQuestion += (currentQuestion ? '\n' : '') + line;
