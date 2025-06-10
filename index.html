@@ -1089,8 +1089,8 @@
                         
                         <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-2xl p-8 flex flex-col ${
                             theme === 'dark' 
-                                ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
-                                : 'bg-gradient-to-br from-blue-50 to-blue-100'
+                                ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
+                                : 'bg-gradient-to-br from-white to-gray-100'
                         } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                             
                             <div className="flex-1 overflow-y-auto px-2 py-4 flex items-start justify-center">
@@ -1118,19 +1118,38 @@
             const [isSliding, setIsSliding] = useState(false);
             const [animationPhase, setAnimationPhase] = useState('idle'); // 'idle', 'slide-out', 'slide-in'
             const [isTransitioning, setIsTransitioning] = useState(false); // For fade transition
+            const [dragOffset, setDragOffset] = useState(0); // For peek animation
+            const [isDragging, setIsDragging] = useState(false);
             
             const currentCard = cards[currentIndex];
             const hasNext = currentIndex < cards.length - 1;
             const hasPrev = currentIndex > 0;
+            const nextCard = hasNext ? cards[currentIndex + 1] : null;
+            const prevCard = hasPrev ? cards[currentIndex - 1] : null;
             
             // Clean question text by removing Q1), Q2), etc.
             const cleanQuestion = currentCard.question.replace(/^Q\d+\)\s*/, '');
+            
+            // Peek thresholds
+            const PEEK_THRESHOLD = 50; // Minimum drag for peek
+            const NAVIGATE_THRESHOLD = 120; // Minimum drag for navigation
             
             // Hide hints after 3 seconds
             useEffect(() => {
                 const timer = setTimeout(() => setShowHints(false), 3000);
                 return () => clearTimeout(timer);
             }, [currentIndex]);
+            
+            // Reset drag offset when navigation happens
+            useEffect(() => {
+                setDragOffset(0);
+                setIsDragging(false);
+            }, [currentIndex]);
+            
+            // Reset drag offset when card flips
+            useEffect(() => {
+                setDragOffset(0);
+            }, [isFlipped]);
             
             // Speech effect for fullscreen mode
             useEffect(() => {
@@ -1204,15 +1223,26 @@
                 return 1;
             };
             
-            // Touch handlers for gestures with enhanced feedback
+            // Touch handlers for gestures with peek animation
             const handleTouchStart = (e) => {
                 const touch = e.touches[0];
                 touchStartRef.current = { x: touch.clientX, y: touch.clientY };
                 setShowHints(false);
+                setIsDragging(true);
                 
                 // Add subtle touch feedback
                 e.currentTarget.style.transform = 'scale(0.99)';
                 e.currentTarget.style.transition = 'transform 0.1s ease-out';
+            };
+            
+            const handleTouchMove = (e) => {
+                if (!isDragging || isSliding || animationPhase !== 'idle' || isTransitioning) return;
+                
+                const touch = e.touches[0];
+                const deltaX = touch.clientX - touchStartRef.current.x;
+                
+                // Update drag offset for peek effect
+                setDragOffset(deltaX);
             };
             
             const handleTouchEnd = (e) => {
@@ -1220,7 +1250,9 @@
                 e.currentTarget.style.transform = 'scale(1)';
                 e.currentTarget.style.transition = 'transform 0.2s ease-out';
                 
-                if (isSliding || animationPhase !== 'idle' || isTransitioning) return; // Ignore touches during animation
+                setIsDragging(false);
+                
+                if (isSliding || animationPhase !== 'idle' || isTransitioning) return;
                 
                 const touch = e.changedTouches[0];
                 touchEndRef.current = { x: touch.clientX, y: touch.clientY };
@@ -1229,6 +1261,9 @@
                 const deltaY = touchEndRef.current.y - touchStartRef.current.y;
                 
                 const minSwipeDistance = 50;
+                
+                // Reset drag offset
+                setDragOffset(0);
                 
                 // Determine gesture type
                 if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > minSwipeDistance) {
@@ -1241,8 +1276,8 @@
                         e.currentTarget.style.transition = 'all 0.3s ease-out';
                         setTimeout(() => onExit(), 200);
                     }
-                } else if (Math.abs(deltaX) > minSwipeDistance) {
-                    // Horizontal swipe with enhanced animation
+                } else if (Math.abs(deltaX) > NAVIGATE_THRESHOLD) {
+                    // Large horizontal swipe - navigate
                     SpeechService.stop();
                     if (deltaX > 0) {
                         // Swipe right - previous card
@@ -1255,10 +1290,11 @@
                             handleNavigateWithAnimation(currentIndex + 1, 'left');
                         }
                     }
-                } else {
-                    // Tap - fade transition to flip
+                } else if (Math.abs(deltaX) < 30 && Math.abs(deltaY) < 30) {
+                    // Small movement - flip card
                     handleCardClick();
                 }
+                // Medium swipes (between peek and navigate) do nothing - just return to center
             };
             
             return (
@@ -1290,17 +1326,83 @@
                         />
                     </div>
                     
-                    {/* Main card area with enhanced slide animation */}
+                    {/* Main card area with peek animation */}
                     <div 
                         className="flex-1 flex items-center justify-center p-4 perspective-1000 relative overflow-hidden"
                         onTouchStart={handleTouchStart}
+                        onTouchMove={handleTouchMove}
                         onTouchEnd={handleTouchEnd}
                     >
+                        {/* Previous card preview (right side when dragging right) */}
+                        {prevCard && Math.abs(dragOffset) > PEEK_THRESHOLD && dragOffset > 0 && (
+                            <div 
+                                className="absolute left-0 top-0 w-full h-full flex items-center justify-center p-4"
+                                style={{
+                                    transform: `translateX(${Math.min(dragOffset - 100, 0)}px)`,
+                                    opacity: Math.min(Math.abs(dragOffset) / NAVIGATE_THRESHOLD, 0.7)
+                                }}
+                            >
+                                <div className={`w-full max-w-2xl h-full rounded-3xl p-8 flex flex-col ${
+                                    theme === 'dark' 
+                                        ? 'bg-gradient-to-br from-gray-700 via-gray-800 to-gray-700 text-white' 
+                                        : 'bg-gradient-to-br from-gray-100 via-gray-200 to-gray-100'
+                                } shadow-xl overflow-hidden border-2 ${
+                                    theme === 'dark' ? 'border-gray-500' : 'border-gray-300'
+                                } opacity-70`}>
+                                    <div className="text-center mb-4">
+                                        <div className="text-lg font-light tracking-widest opacity-60">
+                                            QUESTION {currentIndex}
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto flex items-center justify-center">
+                                        <div className="text-center w-full">
+                                            <h2 className="text-xl md:text-2xl font-medium leading-relaxed">
+                                                {prevCard.question.replace(/^Q\d+\)\s*/, '')}
+                                            </h2>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* Next card preview (left side when dragging left) */}
+                        {nextCard && Math.abs(dragOffset) > PEEK_THRESHOLD && dragOffset < 0 && (
+                            <div 
+                                className="absolute right-0 top-0 w-full h-full flex items-center justify-center p-4"
+                                style={{
+                                    transform: `translateX(${Math.max(dragOffset + 100, 0)}px)`,
+                                    opacity: Math.min(Math.abs(dragOffset) / NAVIGATE_THRESHOLD, 0.7)
+                                }}
+                            >
+                                <div className={`w-full max-w-2xl h-full rounded-3xl p-8 flex flex-col ${
+                                    theme === 'dark' 
+                                        ? 'bg-gradient-to-br from-gray-700 via-gray-800 to-gray-700 text-white' 
+                                        : 'bg-gradient-to-br from-gray-100 via-gray-200 to-gray-100'
+                                } shadow-xl overflow-hidden border-2 ${
+                                    theme === 'dark' ? 'border-gray-500' : 'border-gray-300'
+                                } opacity-70`}>
+                                    <div className="text-center mb-4">
+                                        <div className="text-lg font-light tracking-widest opacity-60">
+                                            QUESTION {currentIndex + 2}
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto flex items-center justify-center">
+                                        <div className="text-center w-full">
+                                            <h2 className="text-xl md:text-2xl font-medium leading-relaxed">
+                                                {nextCard.question.replace(/^Q\d+\)\s*/, '')}
+                                            </h2>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* Main current card */}
                         <div 
-                            className={`relative w-full max-w-2xl h-full cursor-pointer transition-all duration-500 ease-out`}
+                            className={`relative w-full max-w-2xl h-full cursor-pointer transition-all duration-300 ease-out z-10`}
                             style={{
-                                transform: getSlideTransform(),
-                                transition: 'all 0.5s cubic-bezier(0.4, 0.0, 0.2, 1)',
+                                transform: `${getSlideTransform()} translateX(${Math.max(-50, Math.min(50, dragOffset * 0.3))}px)`,
+                                transition: isDragging ? 'none' : 'all 0.5s cubic-bezier(0.4, 0.0, 0.2, 1)',
                                 filter: animationPhase !== 'idle' ? 'blur(1px)' : 'blur(0px)',
                                 opacity: getSlideOpacity()
                             }}
@@ -1398,7 +1500,7 @@
                             <div className="flex items-center justify-center gap-1 text-xs">
                                 <span className="animate-bounce">👆</span> Tap to flip • 
                                 <span className="animate-bounce" style={{animationDelay: '0.1s'}}>←</span> 
-                                <span className="animate-bounce" style={{animationDelay: '0.2s'}}>→</span> Swipe to navigate • 
+                                <span className="animate-bounce" style={{animationDelay: '0.2s'}}>→</span> Drag to peek • 
                                 <span className="animate-bounce" style={{animationDelay: '0.3s'}}>↓</span> Swipe down to exit
                             </div>
                         </div>
