@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1f2937">
-    <title>Flash Cards Pro</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+    <title>Flash Cards Pro - Crane Operations</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏗️</text></svg>">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -38,6 +38,11 @@
         @media screen and (max-width: 768px) { 
             input, textarea, select { font-size: 16px !important; } 
         }
+        .speaking { animation: pulse 1s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
     </style>
 </head>
 <body>
@@ -51,7 +56,8 @@
             const icons = {
                 search: "🔍", plus: "➕", moon: "🌙", sun: "☀️", menu: "☰",
                 cards: "🎴", study: "📚", stats: "📊", edit: "✏️", delete: "🗑️",
-                check: "✅", x: "❌", brain: "🧠"
+                check: "✅", x: "❌", brain: "🧠", crane: "🏗️", upload: "📁",
+                speaker: "🔊", mute: "🔇"
             };
             return React.createElement('span', {
                 className: `inline-block ${className}`,
@@ -67,7 +73,101 @@
             return context;
         };
 
-        // In-memory storage service (replacing localStorage)
+        // Speech Service
+        class SpeechService {
+            static speak(text, rate = 1.0) {
+                if ('speechSynthesis' in window) {
+                    speechSynthesis.cancel(); // Stop any current speech
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.rate = rate;
+                    utterance.pitch = 1;
+                    utterance.volume = 1;
+                    speechSynthesis.speak(utterance);
+                    return utterance;
+                }
+                return null;
+            }
+            
+            static stop() {
+                if ('speechSynthesis' in window) {
+                    speechSynthesis.cancel();
+                }
+            }
+            
+            static isSupported() {
+                return 'speechSynthesis' in window;
+            }
+        }
+
+        // Import Service
+        class ImportService {
+            static parseQuestionsFromText(text) {
+                const cards = [];
+                const questionBlocks = text.split(/\n\s*(?=Q\d+\))/);
+                
+                questionBlocks.forEach((block, index) => {
+                    if (!block.trim()) return;
+                    
+                    const lines = block.trim().split('\n');
+                    let questionText = '';
+                    let answerText = '';
+                    let inAnswer = false;
+                    
+                    lines.forEach(line => {
+                        if (line.startsWith('Answer:')) {
+                            inAnswer = true;
+                            answerText = line.replace('Answer:', '').trim();
+                        } else if (inAnswer) {
+                            answerText += '\n' + line.trim();
+                        } else {
+                            questionText += (questionText ? ' ' : '') + line.trim();
+                        }
+                    });
+                    
+                    if (questionText && answerText) {
+                        // Determine difficulty
+                        let difficulty = 'medium';
+                        if (questionText.includes('a)') && questionText.includes('b)')) {
+                            difficulty = 'hard';
+                        } else if (questionText.length < 80) {
+                            difficulty = 'easy';
+                        }
+                        
+                        // Extract tags
+                        let tags = [];
+                        if (questionText.toLowerCase().includes('loler')) tags.push('LOLER');
+                        if (questionText.toLowerCase().includes('personnel')) tags.push('personnel');
+                        if (questionText.toLowerCase().includes('safety')) tags.push('safety');
+                        if (questionText.toLowerCase().includes('wind')) tags.push('wind');
+                        if (questionText.toLowerCase().includes('crane')) tags.push('crane');
+                        if (questionText.toLowerCase().includes('lift')) tags.push('lifting');
+                        
+                        cards.push({
+                            id: Date.now() + index,
+                            question: questionText.trim(),
+                            answer: answerText.trim(),
+                            category: 'Crane Operations',
+                            tags,
+                            difficulty,
+                            media: [],
+                            created: new Date().toISOString(),
+                            lastStudied: null,
+                            nextReview: null,
+                            timesStudied: 0,
+                            timesCorrect: 0,
+                            easeFactor: 2.5,
+                            interval: 0,
+                            repetitions: 0,
+                            lapses: 0,
+                        });
+                    }
+                });
+                
+                return cards;
+            }
+        }
+
+        // Storage Service
         class StorageService {
             static exportData(state) {
                 const data = {
@@ -80,16 +180,31 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `flashcards-pro-${new Date().toISOString().split('T')[0]}.json`;
+                a.download = `crane-flashcards-${new Date().toISOString().split('T')[0]}.json`;
                 a.click();
                 URL.revokeObjectURL(url);
             }
         }
 
-        // Card Component
+        // Card Component with Speech
         function MobileCardItem({ card, onEdit, onDelete, onStudy }) {
             const { state: { theme } } = useFlashCards();
             const [showActions, setShowActions] = useState(false);
+            const [isSpeaking, setIsSpeaking] = useState(false);
+            
+            const handleSpeak = (e) => {
+                e.stopPropagation();
+                if (isSpeaking) {
+                    SpeechService.stop();
+                    setIsSpeaking(false);
+                } else {
+                    setIsSpeaking(true);
+                    const utterance = SpeechService.speak(`Question: ${card.question}. Answer: ${card.answer}`);
+                    if (utterance) {
+                        utterance.onend = () => setIsSpeaking(false);
+                    }
+                }
+            };
             
             return (
                 <div className={`relative mb-3 rounded-xl border transition-all cursor-pointer ${
@@ -98,13 +213,19 @@
                     <div className="p-4" onClick={() => setShowActions(!showActions)}>
                         <div className="flex justify-between items-start mb-2">
                             <h4 className="font-medium text-base leading-tight pr-2 flex-1">{card.question}</h4>
-                            <span className={`text-xs px-2 py-1 rounded flex-shrink-0 ${
-                                card.difficulty === 'easy' ? 'bg-green-500 text-white'
-                                : card.difficulty === 'medium' ? 'bg-yellow-500 text-white'
-                                : 'bg-red-500 text-white'
-                            }`}>
-                                {card.difficulty}
-                            </span>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                                <button onClick={handleSpeak}
+                                    className={`p-1 rounded ${isSpeaking ? 'speaking text-blue-500' : 'text-gray-400 hover:text-blue-500'}`}>
+                                    <Icon name={isSpeaking ? "mute" : "speaker"} className="w-4 h-4" />
+                                </button>
+                                <span className={`text-xs px-2 py-1 rounded ${
+                                    card.difficulty === 'easy' ? 'bg-green-500 text-white'
+                                    : card.difficulty === 'medium' ? 'bg-yellow-500 text-white'
+                                    : 'bg-red-500 text-white'
+                                }`}>
+                                    {card.difficulty}
+                                </span>
+                            </div>
                         </div>
                         <p className={`text-sm mb-3 line-clamp-2 ${
                             theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
@@ -148,12 +269,28 @@
             );
         }
 
-        // Study Card
+        // Study Card with Speech
         function MobileStudyCard({ card, isFlipped, onFlip }) {
             const { state: { theme } } = useFlashCards();
+            const [isSpeaking, setIsSpeaking] = useState(false);
+            
+            const handleSpeak = (e) => {
+                e.stopPropagation();
+                if (isSpeaking) {
+                    SpeechService.stop();
+                    setIsSpeaking(false);
+                } else {
+                    setIsSpeaking(true);
+                    const text = isFlipped ? card.answer : card.question;
+                    const utterance = SpeechService.speak(text);
+                    if (utterance) {
+                        utterance.onend = () => setIsSpeaking(false);
+                    }
+                }
+            };
             
             return (
-                <div className="relative w-full h-80 perspective-1000" onClick={onFlip}>
+                <div className="relative w-full h-80 perspective-1000">
                     <div className={`relative w-full h-full transition-transform duration-500 transform-style-preserve-3d cursor-pointer ${
                         isFlipped ? 'rotate-y-180' : ''
                     }`}>
@@ -161,7 +298,7 @@
                             theme === 'dark' 
                                 ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
                                 : 'bg-gradient-to-br from-white to-gray-100'
-                        } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                        } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`} onClick={onFlip}>
                             <div className="flex justify-between items-start mb-4">
                                 <span className={`text-xs px-2 py-1 rounded ${
                                     card.difficulty === 'easy' ? 'bg-green-500 text-white'
@@ -170,6 +307,10 @@
                                 }`}>
                                     {card.difficulty}
                                 </span>
+                                <button onClick={handleSpeak}
+                                    className={`p-2 rounded-lg ${isSpeaking ? 'speaking text-blue-500' : 'text-gray-400 hover:text-blue-500'}`}>
+                                    <Icon name={isSpeaking ? "mute" : "speaker"} className="w-5 h-5" />
+                                </button>
                             </div>
                             <div className="flex-1 flex items-center justify-center p-2">
                                 <div className="text-center">
@@ -183,7 +324,13 @@
                             theme === 'dark' 
                                 ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
                                 : 'bg-gradient-to-br from-blue-50 to-blue-100'
-                        } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                        } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`} onClick={onFlip}>
+                            <div className="flex justify-end mb-4">
+                                <button onClick={handleSpeak}
+                                    className={`p-2 rounded-lg ${isSpeaking ? 'speaking text-blue-300' : 'text-gray-400 hover:text-blue-300'}`}>
+                                    <Icon name={isSpeaking ? "mute" : "speaker"} className="w-5 h-5" />
+                                </button>
+                            </div>
                             <div className="flex-1 flex items-center justify-center p-2">
                                 <div className="text-center">
                                     <h2 className="text-lg font-medium leading-relaxed whitespace-pre-line">{card.answer}</h2>
@@ -196,7 +343,7 @@
             );
         }
 
-        // Study Mode
+        // Study Mode (same as before)
         function MobileStudyMode({ cards, onComplete }) {
             const { state: { theme } } = useFlashCards();
             const [currentIndex, setCurrentIndex] = useState(0);
@@ -328,7 +475,7 @@
             );
         }
 
-        // Card Editor
+        // Card Editor (same as before)
         function MobileCardEditor({ card, onSave, onCancel }) {
             const { state: { theme } } = useFlashCards();
             const [question, setQuestion] = useState(card?.question || '');
@@ -421,6 +568,90 @@
             );
         }
 
+        // Import Modal
+        function ImportModal({ onClose, onImport }) {
+            const { state: { theme } } = useFlashCards();
+            const [importText, setImportText] = useState('');
+            const [isProcessing, setIsProcessing] = useState(false);
+            
+            const handleImport = async () => {
+                if (!importText.trim()) return;
+                
+                setIsProcessing(true);
+                try {
+                    const cards = ImportService.parseQuestionsFromText(importText);
+                    if (cards.length > 0) {
+                        onImport(cards);
+                        onClose();
+                    } else {
+                        alert('No valid questions found in the text.');
+                    }
+                } catch (error) {
+                    alert('Error parsing questions: ' + error.message);
+                } finally {
+                    setIsProcessing(false);
+                }
+            };
+            
+            const handleFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (file && file.type === 'text/plain') {
+                    const reader = new FileReader();
+                    reader.onload = (e) => setImportText(e.target.result);
+                    reader.readAsText(file);
+                }
+            };
+            
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className={`w-full max-w-2xl rounded-2xl ${
+                        theme === 'dark' ? 'bg-gray-900' : 'bg-white'
+                    } p-6`}>
+                        <h2 className="text-xl font-semibold mb-6">Import Questions 📁</h2>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Upload Text File</label>
+                                <input type="file" accept=".txt" onChange={handleFileUpload}
+                                    className={`w-full px-4 py-3 rounded-xl border ${
+                                        theme === 'dark' 
+                                            ? 'bg-gray-800 border-gray-700' 
+                                            : 'bg-gray-100 border-gray-300'
+                                    } text-base`} />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Or paste questions here:</label>
+                                <textarea value={importText} onChange={(e) => setImportText(e.target.value)}
+                                    className={`w-full px-4 py-3 rounded-xl border ${
+                                        theme === 'dark' 
+                                            ? 'bg-gray-800 border-gray-700 text-white' 
+                                            : 'bg-white border-gray-300'
+                                    } focus:outline-none focus:ring-2 focus:ring-blue-500 text-base`}
+                                    rows={10} 
+                                    placeholder="Paste your questions and answers here...&#10;&#10;Format:&#10;Q1) Your question here?&#10;Answer: Your answer here&#10;&#10;Q2) Another question?&#10;Answer: Another answer" />
+                            </div>
+                            
+                            <div className="flex gap-3 pt-4">
+                                <button onClick={onClose}
+                                    className={`flex-1 py-3 rounded-xl border ${
+                                        theme === 'dark' 
+                                            ? 'border-gray-700 hover:bg-gray-800' 
+                                            : 'border-gray-300 hover:bg-gray-100'
+                                    } transition-colors font-medium`}>
+                                    Cancel
+                                </button>
+                                <button onClick={handleImport} disabled={!importText.trim() || isProcessing}
+                                    className="flex-1 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 transition-colors font-medium">
+                                    {isProcessing ? 'Processing...' : 'Import Questions'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         // Provider Component
         function FlashCardsProvider({ children }) {
             const [state, setState] = useState({
@@ -430,43 +661,7 @@
                         question: 'Q1) Explain why MUST there be a safe system of work.',
                         answer: 'It is a LEGAL requirement under the HASWA 1974.',
                         category: 'Crane Operations',
-                        tags: ['safety', 'legal'],
-                        difficulty: 'medium',
-                        media: [],
-                        created: new Date().toISOString(),
-                        lastStudied: null,
-                        nextReview: null,
-                        timesStudied: 0,
-                        timesCorrect: 0,
-                        easeFactor: 2.5,
-                        interval: 0,
-                        repetitions: 0,
-                        lapses: 0,
-                    },
-                    {
-                        id: '2',
-                        question: 'Q2) Who has overall control of the lifting operation?',
-                        answer: 'The Appointed Person',
-                        category: 'Crane Operations',
-                        tags: ['responsibility', 'control'],
-                        difficulty: 'easy',
-                        media: [],
-                        created: new Date().toISOString(),
-                        lastStudied: null,
-                        nextReview: null,
-                        timesStudied: 0,
-                        timesCorrect: 0,
-                        easeFactor: 2.5,
-                        interval: 0,
-                        repetitions: 0,
-                        lapses: 0,
-                    },
-                    {
-                        id: '3',
-                        question: 'Q3) What is the Factor of Safety when lifting personnel?',
-                        answer: '2:1',
-                        category: 'Crane Operations',
-                        tags: ['personnel', 'safety factor'],
+                        tags: ['safety'],
                         difficulty: 'medium',
                         media: [],
                         created: new Date().toISOString(),
@@ -484,18 +679,7 @@
                 studySessions: [],
                 cardProgress: {},
                 theme: 'dark',
-                settings: {
-                    dailyGoal: 20,
-                    notificationsEnabled: false,
-                    soundEnabled: true,
-                    autoAdvance: true,
-                    studyReminders: [],
-                    speechEnabled: true,
-                    speechRate: 1.0,
-                    speechVoice: '',
-                    autoReadQuestion: false,
-                    autoReadAnswer: false,
-                },
+                speechEnabled: true,
             });
             
             useEffect(() => {
@@ -520,6 +704,14 @@
                     ...prev,
                     cards: [...prev.cards, newCard],
                     categories: new Set([...prev.categories, card.category].filter(Boolean)),
+                }));
+            };
+            
+            const importCards = (cards) => {
+                setState(prev => ({
+                    ...prev,
+                    cards: [...prev.cards, ...cards],
+                    categories: new Set([...prev.categories, ...cards.map(c => c.category)].filter(Boolean)),
                 }));
             };
             
@@ -560,7 +752,7 @@
             };
             
             const value = {
-                state, addCard, updateCard, deleteCard, addStudySession, toggleTheme
+                state, addCard, importCards, updateCard, deleteCard, addStudySession, toggleTheme
             };
             
             return React.createElement(FlashCardsContext.Provider, { value }, children);
@@ -568,7 +760,7 @@
 
         // Main App Component
         function MobileFlashCardsApp() {
-            const { state, toggleTheme, addCard, updateCard, deleteCard, addStudySession } = useFlashCards();
+            const { state, toggleTheme, addCard, importCards, updateCard, deleteCard, addStudySession } = useFlashCards();
             const { theme, cards, categories } = state;
             
             const [activeView, setActiveView] = useState('cards');
@@ -578,6 +770,7 @@
             const [editingCard, setEditingCard] = useState(undefined);
             const [isStudying, setIsStudying] = useState(false);
             const [showMenu, setShowMenu] = useState(false);
+            const [showImportModal, setShowImportModal] = useState(false);
             
             const filteredCards = useMemo(() => {
                 return cards.filter(card => {
@@ -610,7 +803,7 @@
                             <div className="flex justify-between items-center">
                                 <h1 className="text-xl font-bold">
                                     <span className="bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
-                                        Flash Cards Pro 🎯
+                                        Crane Operations 🏗️
                                     </span>
                                 </h1>
                                 
@@ -661,6 +854,13 @@
                                     <Icon name="plus" className="w-4 h-4" />
                                     New Card
                                 </button>
+                                <button onClick={() => { setShowImportModal(true); setShowMenu(false); }}
+                                    className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
+                                        theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                                    }`}>
+                                    <Icon name="upload" className="w-4 h-4" />
+                                    Import Questions
+                                </button>
                                 <button onClick={() => { StorageService.exportData(state); setShowMenu(false); }}
                                     className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
                                         theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
@@ -677,13 +877,19 @@
                             <div className="space-y-4">
                                 {filteredCards.length === 0 ? (
                                     <div className="text-center py-12">
-                                        <Icon name="study" className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                                        <Icon name="upload" className="w-16 h-16 mx-auto mb-4 text-gray-400" />
                                         <p className="text-lg mb-2">No cards found</p>
-                                        <p className="text-gray-500 mb-4">Create your first card to get started!</p>
-                                        <button onClick={() => setShowCardEditor(true)}
-                                            className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium">
-                                            Create Card
-                                        </button>
+                                        <p className="text-gray-500 mb-4">Import your 73 crane questions or create new cards!</p>
+                                        <div className="flex gap-3 justify-center">
+                                            <button onClick={() => setShowImportModal(true)}
+                                                className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium">
+                                                Import Questions
+                                            </button>
+                                            <button onClick={() => setShowCardEditor(true)}
+                                                className="px-6 py-3 border border-blue-500 text-blue-500 rounded-xl hover:bg-blue-50 font-medium">
+                                                Create Card
+                                            </button>
+                                        </div>
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
@@ -703,9 +909,9 @@
                                 <h2 className="text-2xl font-bold text-center mb-6">Ready to Study? 📚</h2>
                                 <div className={`p-6 rounded-xl ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'} text-center`}>
                                     <Icon name="brain" className="w-12 h-12 mx-auto mb-4 text-blue-500" />
-                                    <h3 className="text-lg font-semibold mb-2">Standard Study Mode</h3>
+                                    <h3 className="text-lg font-semibold mb-2">Crane Operations Study</h3>
                                     <p className={`text-sm mb-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                                        Classic flashcard study with self-grading
+                                        Practice your crane operation knowledge with speech support
                                     </p>
                                     <button onClick={() => setIsStudying(true)} disabled={filteredCards.length === 0}
                                         className="w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium">
@@ -734,6 +940,14 @@
                                         <div className="text-sm text-gray-500">Studied Cards</div>
                                     </div>
                                 </div>
+                                
+                                {SpeechService.isSupported() && (
+                                    <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'} text-center`}>
+                                        <Icon name="speaker" className="w-8 h-8 mx-auto mb-2 text-blue-500" />
+                                        <p className="text-sm text-gray-500">Speech synthesis supported! 🎤</p>
+                                        <p className="text-xs text-gray-400 mt-1">Questions and answers can be read aloud</p>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </main>
@@ -763,6 +977,14 @@
                                     }} />
                             </div>
                         </div>
+                    )}
+                    
+                    {/* Import Modal */}
+                    {showImportModal && (
+                        <ImportModal 
+                            onClose={() => setShowImportModal(false)}
+                            onImport={importCards}
+                        />
                     )}
                     
                     {/* Bottom Navigation */}
