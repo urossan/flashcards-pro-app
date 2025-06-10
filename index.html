@@ -113,6 +113,116 @@
                 a.click();
                 URL.revokeObjectURL(url);
             }
+            
+            static async importData(file, onSuccess, onError) {
+                try {
+                    const text = await file.text();
+                    
+                    // Try to parse as JSON first
+                    let data;
+                    try {
+                        data = JSON.parse(text);
+                        if (data.cards && Array.isArray(data.cards)) {
+                            onSuccess(data);
+                            return;
+                        }
+                    } catch (e) {
+                        // Not JSON, try parsing as Q&A text format
+                    }
+                    
+                    // Parse Q&A text format
+                    const cards = this.parseQAText(text);
+                    if (cards.length > 0) {
+                        const importData = {
+                            cards,
+                            categories: new Set(['Theory Questions']),
+                            studySessions: [],
+                            cardProgress: {},
+                        };
+                        onSuccess(importData);
+                    } else {
+                        onError('No valid questions found in file');
+                    }
+                } catch (error) {
+                    onError('Failed to read file: ' + error.message);
+                }
+            }
+            
+            static parseQAText(text) {
+                const cards = [];
+                const lines = text.split('\n');
+                let currentQuestion = '';
+                let currentAnswer = '';
+                let isAnswer = false;
+                let questionNumber = 1;
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    
+                    // Check if this is a question line (starts with Q followed by number)
+                    if (line.match(/^Q\d+\)/)) {
+                        // Save previous card if exists
+                        if (currentQuestion && currentAnswer) {
+                            cards.push({
+                                id: questionNumber.toString(),
+                                question: currentQuestion.trim(),
+                                answer: currentAnswer.trim(),
+                                category: 'Theory Questions',
+                                tags: [],
+                                difficulty: 'medium',
+                                media: [],
+                                created: new Date().toISOString(),
+                                lastStudied: null,
+                                nextReview: null,
+                                timesStudied: 0,
+                                timesCorrect: 0,
+                                easeFactor: 2.5,
+                                interval: 0,
+                                repetitions: 0,
+                                lapses: 0
+                            });
+                            questionNumber++;
+                        }
+                        
+                        currentQuestion = line;
+                        currentAnswer = '';
+                        isAnswer = false;
+                    } else if (line.startsWith('Answer:')) {
+                        isAnswer = true;
+                        currentAnswer = line.replace('Answer:', '').trim();
+                    } else if (line.length > 0) {
+                        if (isAnswer) {
+                            currentAnswer += (currentAnswer ? '\n' : '') + line;
+                        } else {
+                            currentQuestion += (currentQuestion ? '\n' : '') + line;
+                        }
+                    }
+                }
+                
+                // Don't forget the last card
+                if (currentQuestion && currentAnswer) {
+                    cards.push({
+                        id: questionNumber.toString(),
+                        question: currentQuestion.trim(),
+                        answer: currentAnswer.trim(),
+                        category: 'Theory Questions',
+                        tags: [],
+                        difficulty: 'medium',
+                        media: [],
+                        created: new Date().toISOString(),
+                        lastStudied: null,
+                        nextReview: null,
+                        timesStudied: 0,
+                        timesCorrect: 0,
+                        easeFactor: 2.5,
+                        interval: 0,
+                        repetitions: 0,
+                        lapses: 0
+                    });
+                }
+                
+                return cards;
+            }
         }
 
         // Card Data - All 73 Questions from your file (Q1-Q73)
@@ -1224,6 +1334,14 @@
                 }));
             };
             
+            const importData = (importedData) => {
+                setState(prev => ({
+                    ...prev,
+                    cards: [...prev.cards, ...importedData.cards],
+                    categories: new Set([...prev.categories, ...importedData.categories]),
+                }));
+            };
+            
             const value = {
                 state,
                 addCard,
@@ -1231,6 +1349,7 @@
                 deleteCard,
                 addStudySession,
                 toggleTheme,
+                importData,
             };
             
             return React.createElement(FlashCardsContext.Provider, { value }, children);
@@ -1238,7 +1357,7 @@
 
         // Main App Component
         function MobileFlashCardsApp() {
-            const { state, toggleTheme, addCard, updateCard, deleteCard, addStudySession } = useFlashCards();
+            const { state, toggleTheme, addCard, updateCard, deleteCard, addStudySession, importData } = useFlashCards();
             const { theme, cards, categories } = state;
             
             const [activeView, setActiveView] = useState('cards');
@@ -1248,6 +1367,32 @@
             const [editingCard, setEditingCard] = useState(undefined);
             const [isStudying, setIsStudying] = useState(false);
             const [showMenu, setShowMenu] = useState(false);
+            
+            const fileInputRef = React.useRef(null);
+            
+            const handleImport = () => {
+                fileInputRef.current?.click();
+                setShowMenu(false);
+            };
+            
+            const handleFileChange = (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                
+                StorageService.importData(
+                    file,
+                    (data) => {
+                        importData(data);
+                        alert(`Successfully imported ${data.cards.length} cards!`);
+                    },
+                    (error) => {
+                        alert(`Import failed: ${error}`);
+                    }
+                );
+                
+                // Reset file input
+                event.target.value = '';
+            };
             
             const filteredCards = useMemo(() => {
                 return cards.filter(card => {
@@ -1352,6 +1497,14 @@
                                     New Card
                                 </button>
                                 <button
+                                    onClick={handleImport}
+                                    className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
+                                        theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                                    }`}
+                                >
+                                    📥 Import Cards
+                                </button>
+                                <button
                                     onClick={() => {
                                         StorageService.exportData(state);
                                         setShowMenu(false);
@@ -1365,6 +1518,15 @@
                             </div>
                         </div>
                     )}
+                    
+                    {/* Hidden file input for import */}
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".txt,.json"
+                        onChange={handleFileChange}
+                        style={{ display: 'none' }}
+                    />
                     
                     <main className="px-4 py-4 pb-20">
                         {activeView === 'cards' && !isStudying && (
