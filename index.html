@@ -27,7 +27,1528 @@
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        // Your React app code goes here - I'll provide this separately
+        // Flash Cards Pro - Complete React App
+const { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } = React;
+const { Search, Plus, Upload, Download, Settings, BarChart, Moon, Sun, Volume2, VolumeX, X, Check, Clock, Brain, Zap, TrendingUp, BookOpen, Shuffle, Layers, Menu, Edit, Trash2 } = lucideReact;
+
+// ==================== Types & Interfaces ====================
+const StudyModes = {
+  STANDARD: 'standard',
+  QUIZ: 'quiz',
+  SPACED: 'spaced',
+  TIMED: 'timed'
+};
+
+// ==================== Spaced Repetition Algorithm ====================
+class SpacedRepetitionAlgorithm {
+  static MIN_EASE_FACTOR = 1.3;
+  static EASY_BONUS = 1.3;
+  static HARD_PENALTY = 0.8;
+  
+  static calculateInterval(card, quality) {
+    const updatedCard = { ...card };
+    
+    if (quality < 3) {
+      updatedCard.interval = 1;
+      updatedCard.repetitions = 0;
+      updatedCard.lapses++;
+    } else {
+      if (updatedCard.repetitions === 0) {
+        updatedCard.interval = 1;
+      } else if (updatedCard.repetitions === 1) {
+        updatedCard.interval = 6;
+      } else {
+        updatedCard.interval = Math.round(updatedCard.interval * updatedCard.easeFactor);
+      }
+      updatedCard.repetitions++;
+    }
+    
+    updatedCard.easeFactor = Math.max(
+      this.MIN_EASE_FACTOR,
+      updatedCard.easeFactor + 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)
+    );
+    
+    if (quality === 5) {
+      updatedCard.interval = Math.round(updatedCard.interval * this.EASY_BONUS);
+    } else if (quality === 3) {
+      updatedCard.interval = Math.round(updatedCard.interval * this.HARD_PENALTY);
+    }
+    
+    const nextReviewDate = new Date();
+    nextReviewDate.setDate(nextReviewDate.getDate() + updatedCard.interval);
+    updatedCard.nextReview = nextReviewDate.toISOString();
+    updatedCard.lastStudied = new Date().toISOString();
+    
+    return updatedCard;
+  }
+  
+  static getCardsForReview(cards) {
+    const now = new Date();
+    return cards.filter(card => {
+      if (!card.nextReview) return true;
+      return new Date(card.nextReview) <= now;
+    }).sort((a, b) => {
+      if (a.lapses !== b.lapses) return b.lapses - a.lapses;
+      return a.interval - b.interval;
+    });
+  }
+}
+
+// ==================== Speech Service ====================
+class SpeechService {
+  static synthesis = typeof window !== 'undefined' ? window.speechSynthesis : null;
+  static currentUtterance = null;
+  
+  static isSupported() {
+    return typeof window !== 'undefined' && 'speechSynthesis' in window;
+  }
+  
+  static getVoices() {
+    return this.synthesis?.getVoices() || [];
+  }
+  
+  static speak(text, settings) {
+    return new Promise((resolve, reject) => {
+      if (!this.isSupported() || !settings.speechEnabled || !this.synthesis) {
+        resolve();
+        return;
+      }
+      
+      this.stop();
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = settings.speechRate;
+      
+      const voices = this.getVoices();
+      const selectedVoice = voices.find(v => v.name === settings.speechVoice);
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      }
+      
+      utterance.onend = () => {
+        this.currentUtterance = null;
+        resolve();
+      };
+      
+      utterance.onerror = (error) => {
+        this.currentUtterance = null;
+        reject(error);
+      };
+      
+      this.currentUtterance = utterance;
+      this.synthesis.speak(utterance);
+    });
+  }
+  
+  static stop() {
+    if (this.synthesis?.speaking) {
+      this.synthesis.cancel();
+    }
+    this.currentUtterance = null;
+  }
+  
+  static isSpeaking() {
+    return this.synthesis?.speaking || false;
+  }
+}
+
+// ==================== Storage Service ====================
+class StorageService {
+  static STORAGE_KEY = 'flashcards-pro-pwa';
+  
+  static save(state) {
+    try {
+      const data = {
+        ...state,
+        categories: Array.from(state.categories),
+      };
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
+    } catch (error) {
+      console.error('Failed to save data:', error);
+    }
+  }
+  
+  static load() {
+    try {
+      const data = localStorage.getItem(this.STORAGE_KEY);
+      if (!data) return null;
+      
+      const parsed = JSON.parse(data);
+      return {
+        ...parsed,
+        categories: new Set(parsed.categories || []),
+      };
+    } catch (error) {
+      console.error('Failed to load data:', error);
+      return null;
+    }
+  }
+  
+  static exportData(state) {
+    const data = {
+      version: '3.0',
+      exported: new Date().toISOString(),
+      ...state,
+      categories: Array.from(state.categories),
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `flashcards-pro-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+}
+
+// ==================== Context ====================
+const FlashCardsContext = createContext(null);
+
+const useFlashCards = () => {
+  const context = useContext(FlashCardsContext);
+  if (!context) throw new Error('useFlashCards must be used within FlashCardsProvider');
+  return context;
+};
+
+// ==================== Touch Gestures Hook ====================
+const useTouchGestures = (onSwipeLeft, onSwipeRight, onDoubleTap) => {
+  const [touchStart, setTouchStart] = useState(null);
+  const [lastTap, setLastTap] = useState(0);
+  
+  const handleTouchStart = useCallback((e) => {
+    const touch = e.touches[0];
+    setTouchStart({
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now()
+    });
+  }, []);
+  
+  const handleTouchEnd = useCallback((e) => {
+    if (!touchStart) return;
+    
+    const touch = e.changedTouches[0];
+    const deltaX = touchStart.x - touch.clientX;
+    const deltaY = touchStart.y - touch.clientY;
+    const deltaTime = Date.now() - touchStart.time;
+    
+    // Double tap
+    if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10 && deltaTime < 300) {
+      const now = Date.now();
+      if (now - lastTap < 300 && onDoubleTap) {
+        onDoubleTap();
+      }
+      setLastTap(now);
+    }
+    
+    // Swipe
+    if (Math.abs(deltaX) > 50 && Math.abs(deltaY) < 100 && deltaTime < 500) {
+      if (deltaX > 0 && onSwipeLeft) {
+        onSwipeLeft();
+      } else if (deltaX < 0 && onSwipeRight) {
+        onSwipeRight();
+      }
+    }
+    
+    setTouchStart(null);
+  }, [touchStart, lastTap, onSwipeLeft, onSwipeRight, onDoubleTap]);
+  
+  return { handleTouchStart, handleTouchEnd };
+};
+
+// ==================== Components ====================
+
+// Mobile Card Item
+function MobileCardItem({ card, onEdit, onDelete, onStudy }) {
+  const { state: { theme } } = useFlashCards();
+  const [showActions, setShowActions] = useState(false);
+  
+  return (
+    <div className={`relative mb-3 rounded-xl border transition-all ${
+      theme === 'dark' 
+        ? 'bg-gray-800 border-gray-700' 
+        : 'bg-white border-gray-200'
+    }`}>
+      <div className="p-4" onClick={() => setShowActions(!showActions)}>
+        <div className="flex justify-between items-start mb-2">
+          <h4 className="font-medium text-base leading-tight pr-2 flex-1">{card.question}</h4>
+          <span className={`text-xs px-2 py-1 rounded flex-shrink-0 ${
+            card.difficulty === 'easy' 
+              ? 'bg-green-500 text-white'
+              : card.difficulty === 'medium'
+              ? 'bg-yellow-500 text-white'
+              : 'bg-red-500 text-white'
+          }`}>
+            {card.difficulty}
+          </span>
+        </div>
+        
+        <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'} mb-3 line-clamp-2`}>
+          {card.answer}
+        </p>
+        
+        <div className="flex flex-wrap gap-1">
+          {card.category && (
+            <span className={`text-xs px-2 py-1 rounded ${
+              theme === 'dark' ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-700'
+            }`}>
+              {card.category}
+            </span>
+          )}
+          {card.tags.slice(0, 2).map(tag => (
+            <span key={tag} className={`text-xs px-2 py-1 rounded ${
+              theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'
+            }`}>
+              {tag}
+            </span>
+          ))}
+          {card.tags.length > 2 && (
+            <span className={`text-xs px-2 py-1 rounded ${
+              theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'
+            }`}>
+              +{card.tags.length - 2}
+            </span>
+          )}
+        </div>
+      </div>
+      
+      <div className={`overflow-hidden transition-all duration-300 ${
+        showActions ? 'max-h-16' : 'max-h-0'
+      }`}>
+        <div className={`flex border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onStudy();
+            }}
+            className={`flex-1 py-3 px-4 text-sm font-medium ${
+              theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
+            } border-r ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} text-blue-500`}
+          >
+            Study
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            className={`flex-1 py-3 px-4 text-sm font-medium ${
+              theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
+            } border-r ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}
+          >
+            Edit
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className={`flex-1 py-3 px-4 text-sm font-medium ${
+              theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
+            } text-red-500`}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Mobile Study Card
+function MobileStudyCard({ card, isFlipped, onFlip, showAnswer = false }) {
+  const { state: { theme, settings } } = useFlashCards();
+  const touchGestures = useTouchGestures(undefined, undefined, onFlip);
+  
+  return (
+    <div 
+      className="relative w-full h-80 perspective-1000"
+      {...touchGestures}
+    >
+      <div
+        className={`relative w-full h-full transition-transform duration-500 transform-style-preserve-3d cursor-pointer ${
+          isFlipped || showAnswer ? 'rotate-y-180' : ''
+        }`}
+        onClick={onFlip}
+      >
+        {/* Front - Question */}
+        <div className={`absolute inset-0 backface-hidden rounded-2xl p-6 flex flex-col ${
+          theme === 'dark' 
+            ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
+            : 'bg-gradient-to-br from-white to-gray-100'
+        } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+          
+          <div className="flex justify-between items-start mb-4">
+            <span className={`text-xs px-2 py-1 rounded ${
+              card.difficulty === 'easy' 
+                ? 'bg-green-500 text-white'
+                : card.difficulty === 'medium'
+                ? 'bg-yellow-500 text-white'
+                : 'bg-red-500 text-white'
+            }`}>
+              {card.difficulty}
+            </span>
+            
+            {settings.speechEnabled && SpeechService.isSupported() && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  SpeechService.speak(card.question, settings);
+                }}
+                className={`p-2 rounded-lg ${
+                  theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
+                }`}
+              >
+                <Volume2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          
+          <div className="flex-1 flex items-center justify-center p-2">
+            <div className="text-center">
+              <h2 className="text-lg font-medium mb-4 leading-relaxed">{card.question}</h2>
+            </div>
+          </div>
+          
+          <div className="text-center text-xs opacity-60">
+            Tap or double-tap to reveal answer
+          </div>
+        </div>
+        
+        {/* Back - Answer */}
+        <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-2xl p-6 flex flex-col ${
+          theme === 'dark' 
+            ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
+            : 'bg-gradient-to-br from-blue-50 to-blue-100'
+        } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+          
+          <div className="flex justify-end mb-4">
+            {settings.speechEnabled && SpeechService.isSupported() && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  SpeechService.speak(card.answer, settings);
+                }}
+                className={`p-2 rounded-lg ${
+                  theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
+                }`}
+              >
+                <Volume2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          
+          <div className="flex-1 flex items-center justify-center p-2">
+            <div className="text-center">
+              <h2 className="text-lg font-medium leading-relaxed">{card.answer}</h2>
+            </div>
+          </div>
+          
+          <div className="text-center text-xs opacity-60">
+            Tap to show question
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Mobile Study Mode
+function MobileStudyMode({ cards: initialCards, mode, onComplete }) {
+  const { updateStudyProgress, state: { theme, settings } } = useFlashCards();
+  const [cards, setCards] = useState(() => {
+    if (mode === StudyModes.SPACED) {
+      return SpacedRepetitionAlgorithm.getCardsForReview(initialCards);
+    }
+    return [...initialCards].sort(() => Math.random() - 0.5);
+  });
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [results, setResults] = useState({ correct: 0, incorrect: 0 });
+  const [startTime] = useState(Date.now());
+  const [timeRemaining, setTimeRemaining] = useState(mode === StudyModes.TIMED ? 300 : 0);
+  const [quizOptions, setQuizOptions] = useState([]);
+  const [selectedOption, setSelectedOption] = useState(null);
+  const [showCompletePrompt, setShowCompletePrompt] = useState(false);
+  
+  const currentCard = cards[currentIndex];
+  const progress = ((currentIndex + 1) / cards.length) * 100;
+  
+  // Timer
+  useEffect(() => {
+    if (mode === StudyModes.TIMED && timeRemaining > 0) {
+      const timer = setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev <= 1) {
+            handleComplete();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      return () => clearInterval(timer);
+    }
+  }, [mode, timeRemaining]);
+  
+  // Quiz options
+  useEffect(() => {
+    if (mode === StudyModes.QUIZ && currentCard) {
+      const wrongAnswers = cards
+        .filter(c => c.id !== currentCard.id)
+        .map(c => c.answer)
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3);
+      setQuizOptions([currentCard.answer, ...wrongAnswers].sort(() => Math.random() - 0.5));
+      setSelectedOption(null);
+    }
+  }, [mode, currentCard, cards]);
+  
+  const handleComplete = () => {
+    const duration = Math.floor((Date.now() - startTime) / 1000);
+    onComplete({ ...results, duration });
+  };
+  
+  const handleResponse = (quality) => {
+    if (!currentCard) return;
+    
+    updateStudyProgress(currentCard.id, quality);
+    
+    if (quality >= 3) {
+      setResults(prev => ({ ...prev, correct: prev.correct + 1 }));
+    } else {
+      setResults(prev => ({ ...prev, incorrect: prev.incorrect + 1 }));
+    }
+    
+    if (currentIndex < cards.length - 1) {
+      setTimeout(() => {
+        setCurrentIndex(prev => prev + 1);
+        setIsFlipped(false);
+      }, settings.autoAdvance ? 800 : 0);
+    } else {
+      setShowCompletePrompt(true);
+    }
+  };
+  
+  const handleQuizAnswer = (optionIndex) => {
+    setSelectedOption(optionIndex);
+    const isCorrect = quizOptions[optionIndex] === currentCard.answer;
+    
+    setTimeout(() => {
+      handleResponse(isCorrect ? 4 : 1);
+    }, 1200);
+  };
+  
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+  
+  if (!currentCard) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <BookOpen className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+          <p className="text-lg">No cards to study</p>
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="space-y-4 pb-6">
+      {/* Progress header */}
+      <div className="sticky top-0 z-10 bg-opacity-90 backdrop-blur-sm p-4 rounded-xl">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-sm font-medium">
+            {currentIndex + 1} / {cards.length}
+          </span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1">
+              <Check className="w-4 h-4 text-green-500" />
+              <span className="text-sm">{results.correct}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <X className="w-4 h-4 text-red-500" />
+              <span className="text-sm">{results.incorrect}</span>
+            </div>
+            {mode === StudyModes.TIMED && (
+              <div className="flex items-center gap-1">
+                <Clock className="w-4 h-4" />
+                <span className={`text-sm ${timeRemaining < 60 ? 'text-red-500' : ''}`}>
+                  {formatTime(timeRemaining)}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className={`h-2 rounded-full overflow-hidden ${
+          theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
+        }`}>
+          <div
+            className="h-full bg-blue-500 transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+      
+      {/* Study Card */}
+      <div className="px-4">
+        <MobileStudyCard
+          card={currentCard}
+          isFlipped={isFlipped}
+          onFlip={() => mode !== StudyModes.QUIZ && setIsFlipped(!isFlipped)}
+          showAnswer={mode === StudyModes.QUIZ && selectedOption !== null}
+        />
+      </div>
+      
+      {/* Quiz Options */}
+      {mode === StudyModes.QUIZ && (
+        <div className="px-4 space-y-3">
+          {quizOptions.map((option, index) => (
+            <button
+              key={index}
+              onClick={() => !selectedOption && handleQuizAnswer(index)}
+              disabled={selectedOption !== null}
+              className={`w-full p-4 rounded-xl text-left transition-all ${
+                selectedOption === null
+                  ? theme === 'dark'
+                    ? 'bg-gray-800 hover:bg-gray-700 border border-gray-700'
+                    : 'bg-white hover:bg-gray-50 border border-gray-200'
+                  : selectedOption === index
+                  ? option === currentCard.answer
+                    ? 'bg-green-500 text-white border-green-500'
+                    : 'bg-red-500 text-white border-red-500'
+                  : option === currentCard.answer
+                  ? 'bg-green-500 text-white border-green-500'
+                  : theme === 'dark'
+                  ? 'bg-gray-800 opacity-50 border-gray-700'
+                  : 'bg-white opacity-50 border-gray-200'
+              } border`}
+            >
+              <span className="block text-sm font-medium mb-1">
+                {String.fromCharCode(65 + index)}
+              </span>
+              <span className="block text-sm leading-relaxed">{option}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      
+      {/* Controls */}
+      {mode !== StudyModes.QUIZ && (
+        <div className="px-4">
+          {isFlipped ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => handleResponse(1)}
+                  className="py-3 px-2 bg-red-500 text-white rounded-xl hover:bg-red-600 text-sm font-medium"
+                >
+                  Again
+                </button>
+                <button
+                  onClick={() => handleResponse(3)}
+                  className="py-3 px-2 bg-yellow-500 text-white rounded-xl hover:bg-yellow-600 text-sm font-medium"
+                >
+                  Hard
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => handleResponse(4)}
+                  className="py-3 px-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 text-sm font-medium"
+                >
+                  Good
+                </button>
+                <button
+                  onClick={() => handleResponse(5)}
+                  className="py-3 px-2 bg-green-500 text-white rounded-xl hover:bg-green-600 text-sm font-medium"
+                >
+                  Easy
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsFlipped(true)}
+              className="w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 text-lg font-medium"
+            >
+              Show Answer
+            </button>
+          )}
+        </div>
+      )}
+      
+      {/* Navigation hints */}
+      <div className="px-4 text-center">
+        <p className="text-xs opacity-60">
+          {mode !== StudyModes.QUIZ ? 'Swipe ← → to navigate • Double-tap to flip' : 'Select your answer above'}
+        </p>
+      </div>
+      
+      {/* Complete Session Prompt */}
+      {showCompletePrompt && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className={`w-full max-w-sm rounded-2xl p-6 ${
+            theme === 'dark' ? 'bg-gray-900' : 'bg-white'
+          }`}>
+            <h3 className="text-xl font-semibold mb-4 text-center">Session Complete!</h3>
+            <div className="space-y-3 mb-6">
+              <div className="flex justify-between">
+                <span>Cards studied:</span>
+                <span className="font-medium">{results.correct + results.incorrect}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Correct:</span>
+                <span className="font-medium text-green-500">{results.correct}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Incorrect:</span>
+                <span className="font-medium text-red-500">{results.incorrect}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Accuracy:</span>
+                <span className="font-medium">
+                  {results.correct + results.incorrect > 0
+                    ? Math.round((results.correct / (results.correct + results.incorrect)) * 100)
+                    : 0}%
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={handleComplete}
+              className="w-full py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
+            >
+              Finish Session
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Card Editor
+function MobileCardEditor({ card, onSave, onCancel }) {
+  const { state: { theme } } = useFlashCards();
+  const [question, setQuestion] = useState(card?.question || '');
+  const [answer, setAnswer] = useState(card?.answer || '');
+  const [category, setCategory] = useState(card?.category || '');
+  const [tags, setTags] = useState(card?.tags || []);
+  const [difficulty, setDifficulty] = useState(card?.difficulty || 'medium');
+  const [tagInput, setTagInput] = useState('');
+  
+  const handleSubmit = () => {
+    if (!question.trim() || !answer.trim()) return;
+    
+    onSave({
+      question: question.trim(),
+      answer: answer.trim(),
+      category: category.trim(),
+      tags,
+      difficulty,
+      media: [],
+    });
+  };
+  
+  const addTag = (tag) => {
+    const trimmedTag = tag.trim();
+    if (trimmedTag && !tags.includes(trimmedTag)) {
+      setTags([...tags, trimmedTag]);
+    }
+    setTagInput('');
+  };
+  
+  const removeTag = (tag) => {
+    setTags(tags.filter(t => t !== tag));
+  };
+  
+  return (
+    <div className="space-y-6">
+      <div>
+        <label className="block text-sm font-medium mb-2">Question</label>
+        <textarea
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          className={`w-full px-4 py-3 rounded-xl border ${
+            theme === 'dark' 
+              ? 'bg-gray-800 border-gray-700 text-white' 
+              : 'bg-white border-gray-300'
+          } focus:outline-none focus:ring-2 focus:ring-blue-500 text-base`}
+          rows={3}
+          placeholder="Enter your question..."
+          required
+        />
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium mb-2">Answer</label>
+        <textarea
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          className={`w-full px-4 py-3 rounded-xl border ${
+            theme === 'dark' 
+              ? 'bg-gray-800 border-gray-700 text-white' 
+              : 'bg-white border-gray-300'
+          } focus:outline-none focus:ring-2 focus:ring-blue-500 text-base`}
+          rows={3}
+          placeholder="Enter the answer..."
+          required
+        />
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium mb-2">Category</label>
+        <input
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className={`w-full px-4 py-3 rounded-xl border ${
+            theme === 'dark' 
+              ? 'bg-gray-800 border-gray-700 text-white' 
+              : 'bg-white border-gray-300'
+          } focus:outline-none focus:ring-2 focus:ring-blue-500 text-base`}
+          placeholder="Optional category"
+        />
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium mb-2">Tags</label>
+        <div className="space-y-3">
+          <input
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addTag(tagInput);
+              }
+            }}
+            className={`w-full px-4 py-3 rounded-xl border ${
+              theme === 'dark' 
+                ? 'bg-gray-800 border-gray-700 text-white' 
+                : 'bg-white border-gray-300'
+            } focus:outline-none focus:ring-2 focus:ring-blue-500 text-base`}
+            placeholder="Add tags (press Enter to add)"
+          />
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {tags.map(tag => (
+                <span key={tag} className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm ${
+                  theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
+                }`}>
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => removeTag(tag)}
+                    className="hover:text-red-500"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium mb-3">Difficulty</label>
+        <div className="grid grid-cols-3 gap-3">
+          {['easy', 'medium', 'hard'].map(level => (
+            <button
+              key={level}
+              type="button"
+              onClick={() => setDifficulty(level)}
+              className={`py-3 rounded-xl border transition-colors text-sm font-medium ${
+                difficulty === level
+                  ? level === 'easy'
+                    ? 'bg-green-500 text-white border-green-500'
+                    : level === 'medium'
+                    ? 'bg-yellow-500 text-white border-yellow-500'
+                    : 'bg-red-500 text-white border-red-500'
+                  : theme === 'dark'
+                  ? 'border-gray-700 hover:border-gray-600'
+                  : 'border-gray-300 hover:border-gray-400'
+              }`}
+            >
+              {level.charAt(0).toUpperCase() + level.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+      
+      <div className="flex gap-3 pt-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          className={`flex-1 py-3 rounded-xl border ${
+            theme === 'dark' 
+              ? 'border-gray-700 hover:bg-gray-800' 
+              : 'border-gray-300 hover:bg-gray-100'
+          } transition-colors font-medium`}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={!question.trim() || !answer.trim()}
+          className="flex-1 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+        >
+          {card ? 'Update' : 'Create'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Main App Provider
+function FlashCardsProvider({ children }) {
+  const [state, setState] = useState(() => {
+    const saved = StorageService.load();
+    return {
+      cards: saved?.cards || [
+        {
+          id: '1',
+          question: 'What is the capital of France?',
+          answer: 'Paris',
+          category: 'Geography',
+          tags: ['capitals', 'europe'],
+          difficulty: 'easy',
+          media: [],
+          created: new Date().toISOString(),
+          lastStudied: null,
+          nextReview: null,
+          timesStudied: 0,
+          timesCorrect: 0,
+          easeFactor: 2.5,
+          interval: 0,
+          repetitions: 0,
+          lapses: 0,
+        },
+        {
+          id: '2',
+          question: 'What is 2 + 2?',
+          answer: '4',
+          category: 'Math',
+          tags: ['basic', 'addition'],
+          difficulty: 'easy',
+          media: [],
+          created: new Date().toISOString(),
+          lastStudied: null,
+          nextReview: null,
+          timesStudied: 0,
+          timesCorrect: 0,
+          easeFactor: 2.5,
+          interval: 0,
+          repetitions: 0,
+          lapses: 0,
+        },
+        {
+          id: '3',
+          question: 'Who wrote Romeo and Juliet?',
+          answer: 'William Shakespeare',
+          category: 'Literature',
+          tags: ['shakespeare', 'plays'],
+          difficulty: 'medium',
+          media: [],
+          created: new Date().toISOString(),
+          lastStudied: null,
+          nextReview: null,
+          timesStudied: 0,
+          timesCorrect: 0,
+          easeFactor: 2.5,
+          interval: 0,
+          repetitions: 0,
+          lapses: 0,
+        },
+      ],
+      categories: saved?.categories || new Set(['Geography', 'Math', 'Literature']),
+      studySessions: saved?.studySessions || [],
+      cardProgress: saved?.cardProgress || {},
+      theme: saved?.theme || 'dark',
+      settings: saved?.settings || {
+        dailyGoal: 20,
+        notificationsEnabled: false,
+        soundEnabled: true,
+        autoAdvance: true,
+        studyReminders: [],
+        speechEnabled: true,
+        speechRate: 1.0,
+        speechVoice: '',
+        autoReadQuestion: false,
+        autoReadAnswer: false,
+      },
+    };
+  });
+  
+  useEffect(() => {
+    StorageService.save(state);
+  }, [state]);
+  
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', state.theme === 'dark');
+  }, [state.theme]);
+  
+  const addCard = (card) => {
+    const newCard = {
+      ...card,
+      id: Date.now().toString(),
+      created: new Date().toISOString(),
+      lastStudied: null,
+      nextReview: null,
+      timesStudied: 0,
+      timesCorrect: 0,
+      easeFactor: 2.5,
+      interval: 0,
+      repetitions: 0,
+      lapses: 0,
+    };
+    
+    setState(prev => ({
+      ...prev,
+      cards: [...prev.cards, newCard],
+      categories: new Set([...prev.categories, card.category].filter(Boolean)),
+    }));
+  };
+  
+  const updateCard = (id, updates) => {
+    setState(prev => ({
+      ...prev,
+      cards: prev.cards.map(card => 
+        card.id === id ? { ...card, ...updates } : card
+      ),
+      categories: updates.category 
+        ? new Set([...prev.categories, updates.category])
+        : prev.categories,
+    }));
+  };
+  
+  const deleteCard = (id) => {
+    setState(prev => ({
+      ...prev,
+      cards: prev.cards.filter(card => card.id !== id),
+    }));
+  };
+  
+  const updateStudyProgress = (cardId, quality) => {
+    setState(prev => {
+      const card = prev.cards.find(c => c.id === cardId);
+      if (!card) return prev;
+      
+      const updatedCard = SpacedRepetitionAlgorithm.calculateInterval(card, quality);
+      const isCorrect = quality >= 3;
+      
+      const progress = prev.cardProgress[cardId] || { correct: 0, incorrect: 0, mastery: 0 };
+      const newProgress = {
+        correct: progress.correct + (isCorrect ? 1 : 0),
+        incorrect: progress.incorrect + (isCorrect ? 0 : 1),
+        mastery: 0,
+      };
+      
+      const total = newProgress.correct + newProgress.incorrect;
+      newProgress.mastery = total > 0 ? Math.round((newProgress.correct / total) * 100) : 0;
+      
+      return {
+        ...prev,
+        cards: prev.cards.map(c => c.id === cardId ? updatedCard : c),
+        cardProgress: {
+          ...prev.cardProgress,
+          [cardId]: newProgress,
+        },
+      };
+    });
+  };
+  
+  const addStudySession = (session) => {
+    setState(prev => ({
+      ...prev,
+      studySessions: [
+        ...prev.studySessions,
+        { ...session, id: Date.now().toString() },
+      ],
+    }));
+  };
+  
+  const updateSettings = (settings) => {
+    setState(prev => ({
+      ...prev,
+      settings: { ...prev.settings, ...settings },
+    }));
+  };
+  
+  const toggleTheme = () => {
+    setState(prev => ({
+      ...prev,
+      theme: prev.theme === 'dark' ? 'light' : 'dark',
+    }));
+  };
+  
+  const value = {
+    state,
+    addCard,
+    updateCard,
+    deleteCard,
+    updateStudyProgress,
+    addStudySession,
+    updateSettings,
+    toggleTheme,
+  };
+  
+  return React.createElement(FlashCardsContext.Provider, { value }, children);
+}
+
+// Main App Component
+function MobileFlashCardsApp() {
+  const { state, toggleTheme, addCard, updateCard, deleteCard, addStudySession } = useFlashCards();
+  const { theme, cards, categories } = state;
+  
+  const [activeView, setActiveView] = useState('cards');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [showCardEditor, setShowCardEditor] = useState(false);
+  const [editingCard, setEditingCard] = useState();
+  const [studyMode, setStudyMode] = useState(StudyModes.STANDARD);
+  const [isStudying, setIsStudying] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  
+  const filteredCards = useMemo(() => {
+    return cards.filter(card => {
+      const matchesSearch = !searchQuery || 
+        card.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        card.answer.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        card.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      const matchesCategory = !selectedCategory || card.category === selectedCategory;
+      
+      return matchesSearch && matchesCategory;
+    });
+  }, [cards, searchQuery, selectedCategory]);
+  
+  const handleStudyComplete = (results) => {
+    addStudySession({
+      date: new Date().toISOString(),
+      duration: results.duration,
+      cardsStudied: results.correct + results.incorrect,
+      correctCount: results.correct,
+      mode: studyMode,
+    });
+    
+    setIsStudying(false);
+  };
+  
+  const startStudyingCard = (card) => {
+    setIsStudying(true);
+    setActiveView('study');
+  };
+  
+  return (
+    <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
+      {/* Header */}
+      <header className={`sticky top-0 z-40 ${
+        theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+      } border-b backdrop-blur-md bg-opacity-90`}>
+        <div className="px-4 py-3">
+          <div className="flex justify-between items-center">
+            <h1 className="text-xl font-bold">
+              <span className="bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
+                Flash Cards Pro
+              </span>
+            </h1>
+            
+            <div className="flex items-center gap-2">
+              <button
+                onClick={toggleTheme}
+                className={`p-2 rounded-lg ${
+                  theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                }`}
+              >
+                {theme === 'dark' ? React.createElement(Sun, {className: "w-5 h-5"}) : React.createElement(Moon, {className: "w-5 h-5"})}
+              </button>
+              
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                className={`p-2 rounded-lg ${
+                  theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                }`}
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          
+          {activeView === 'cards' && !isStudying && (
+            <div className="mt-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search cards..."
+                  className={`w-full pl-10 pr-4 py-2 rounded-xl text-base ${
+                    theme === 'dark'
+                      ? 'bg-gray-700 border-gray-600'
+                      : 'bg-gray-100 border-gray-300'
+                  } border focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </header>
+      
+      {/* Menu */}
+      {showMenu && (
+        <div className="fixed inset-0 z-50" onClick={() => setShowMenu(false)}>
+          <div className={`absolute top-16 right-4 w-48 rounded-xl shadow-lg ${
+            theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          } border overflow-hidden`}>
+            <button
+              onClick={() => {
+                setShowCardEditor(true);
+                setShowMenu(false);
+              }}
+              className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
+                theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+              }`}
+            >
+              <Plus className="w-4 h-4" />
+              New Card
+            </button>
+            <button
+              onClick={() => {
+                StorageService.exportData(state);
+                setShowMenu(false);
+              }}
+              className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
+                theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+              }`}
+            >
+              <Download className="w-4 h-4" />
+              Export Data
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* Main Content */}
+      <main className="px-4 py-4 pb-20">
+        {activeView === 'cards' && !isStudying && (
+          <div className="space-y-4">
+            {/* Category filter */}
+            {categories.size > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                <button
+                  onClick={() => setSelectedCategory('')}
+                  className={`px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${
+                    !selectedCategory
+                      ? 'bg-blue-500 text-white'
+                      : theme === 'dark'
+                      ? 'bg-gray-800 text-gray-300'
+                      : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  All
+                </button>
+                {Array.from(categories).map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${
+                      selectedCategory === cat
+                        ? 'bg-blue-500 text-white'
+                        : theme === 'dark'
+                        ? 'bg-gray-800 text-gray-300'
+                        : 'bg-gray-200 text-gray-700'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+            
+            {/* Cards list */}
+            {filteredCards.length === 0 ? (
+              <div className="text-center py-12">
+                <BookOpen className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                <p className="text-lg mb-2">No cards found</p>
+                <p className="text-gray-500 mb-4">Create your first card to get started!</p>
+                <button
+                  onClick={() => setShowCardEditor(true)}
+                  className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
+                >
+                  Create Card
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredCards.map(card => (
+                  React.createElement(MobileCardItem, {
+                    key: card.id,
+                    card,
+                    onEdit: () => {
+                      setEditingCard(card);
+                      setShowCardEditor(true);
+                    },
+                    onDelete: () => {
+                      if (confirm('Delete this card?')) {
+                        deleteCard(card.id);
+                      }
+                    },
+                    onStudy: () => startStudyingCard(card),
+                  })
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {activeView === 'study' && !isStudying && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-center mb-6">Choose Study Mode</h2>
+            
+            <div className="space-y-4">
+              {[
+                {
+                  mode: StudyModes.STANDARD,
+                  title: 'Standard Study',
+                  description: 'Classic flashcard study with self-grading',
+                  icon: BookOpen,
+                  color: 'blue',
+                },
+                {
+                  mode: StudyModes.QUIZ,
+                  title: 'Quiz Mode',
+                  description: 'Multiple choice questions for testing',
+                  icon: Brain,
+                  color: 'purple',
+                },
+                {
+                  mode: StudyModes.SPACED,
+                  title: 'Spaced Repetition',
+                  description: 'Focus on cards that need review',
+                  icon: TrendingUp,
+                  color: 'green',
+                },
+                {
+                  mode: StudyModes.TIMED,
+                  title: 'Timed Challenge',
+                  description: 'Race against the clock (5 minutes)',
+                  icon: Zap,
+                  color: 'yellow',
+                },
+              ].map(({ mode, title, description, icon: Icon }) => (
+                <button
+                  key={mode}
+                  onClick={() => setStudyMode(mode)}
+                  className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
+                    studyMode === mode
+                      ? `border-blue-500 ${
+                          theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'
+                        }`
+                      : theme === 'dark'
+                      ? 'border-gray-700 hover:border-gray-600'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Icon className="w-6 h-6 text-blue-500" />
+                    <div>
+                      <h3 className="font-semibold">{title}</h3>
+                      <p className={`text-sm ${
+                        theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                      }`}>
+                        {description}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            
+            <button
+              onClick={() => setIsStudying(true)}
+              disabled={filteredCards.length === 0}
+              className="w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
+            >
+              Start Studying ({filteredCards.length} cards)
+            </button>
+          </div>
+        )}
+        
+        {(activeView === 'study' || activeView === 'cards') && isStudying && (
+          React.createElement(MobileStudyMode, {
+            cards: filteredCards,
+            mode: studyMode,
+            onComplete: handleStudyComplete,
+          })
+        )}
+        
+        {activeView === 'analytics' && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-center">Analytics</h2>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className={`p-4 rounded-xl ${
+                theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+              } text-center`}>
+                <div className="text-2xl font-bold text-blue-500">{cards.length}</div>
+                <div className="text-sm text-gray-500">Total Cards</div>
+              </div>
+              
+              <div className={`p-4 rounded-xl ${
+                theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+              } text-center`}>
+                <div className="text-2xl font-bold text-green-500">
+                  {cards.filter(c => c.timesCorrect > 0).length}
+                </div>
+                <div className="text-sm text-gray-500">Studied Cards</div>
+              </div>
+              
+              <div className={`p-4 rounded-xl ${
+                theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+              } text-center`}>
+                <div className="text-2xl font-bold text-purple-500">
+                  {Array.from(categories).length}
+                </div>
+                <div className="text-sm text-gray-500">Categories</div>
+              </div>
+              
+              <div className={`p-4 rounded-xl ${
+                theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+              } text-center`}>
+                <div className="text-2xl font-bold text-yellow-500">
+                  {state.studySessions.length}
+                </div>
+                <div className="text-sm text-gray-500">Study Sessions</div>
+              </div>
+            </div>
+            
+            <div className={`p-6 rounded-xl ${
+              theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+            }`}>
+              <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
+              {state.studySessions.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No study sessions yet</p>
+              ) : (
+                <div className="space-y-3">
+                  {state.studySessions.slice(-3).reverse().map(session => (
+                    <div key={session.id} className="flex justify-between items-center">
+                      <div>
+                        <div className="font-medium">{session.mode} mode</div>
+                        <div className="text-sm text-gray-500">
+                          {session.cardsStudied} cards • {Math.floor(session.duration / 60)}m {session.duration % 60}s
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-medium text-green-500">
+                          {Math.round((session.correctCount / session.cardsStudied) * 100)}%
+                        </div>
+                        <div className="text-xs text-gray-500">accuracy</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </main>
+      
+      {/* Card Editor Modal */}
+      {showCardEditor && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className={`w-full max-w-lg my-8 rounded-2xl ${
+            theme === 'dark' ? 'bg-gray-900' : 'bg-white'
+          } p-6`}>
+            <h2 className="text-xl font-semibold mb-6">
+              {editingCard ? 'Edit Card' : 'Create New Card'}
+            </h2>
+            {React.createElement(MobileCardEditor, {
+              card: editingCard,
+              onSave: (card) => {
+                if (editingCard) {
+                  updateCard(editingCard.id, card);
+                } else {
+                  addCard(card);
+                }
+                setShowCardEditor(false);
+                setEditingCard(undefined);
+              },
+              onCancel: () => {
+                setShowCardEditor(false);
+                setEditingCard(undefined);
+              },
+            })}
+          </div>
+        </div>
+      )}
+      
+      {/* Bottom Navigation */}
+      <nav className={`fixed bottom-0 left-0 right-0 z-40 ${
+        theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+      } border-t`}>
+        <div className="flex justify-around py-2" style={{paddingBottom: 'env(safe-area-inset-bottom, 8px)'}}>
+          <button
+            onClick={() => { 
+              setActiveView('cards'); 
+              setIsStudying(false); 
+            }}
+            className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
+              activeView === 'cards' && !isStudying 
+                ? 'text-blue-500' 
+                : theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+            }`}
+          >
+            <Layers className="w-6 h-6 mb-1" />
+            <span className="text-xs">Cards</span>
+          </button>
+          <button
+            onClick={() => { 
+              setActiveView('study'); 
+              setIsStudying(false); 
+            }}
+            className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
+              activeView === 'study' || isStudying 
+                ? 'text-blue-500' 
+                : theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+            }`}
+          >
+            <BookOpen className="w-6 h-6 mb-1" />
+            <span className="text-xs">Study</span>
+          </button>
+          <button
+            onClick={() => { 
+              setActiveView('analytics'); 
+              setIsStudying(false); 
+            }}
+            className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
+              activeView === 'analytics' 
+                ? 'text-blue-500' 
+                : theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+            }`}
+          >
+            <BarChart className="w-6 h-6 mb-1" />
+            <span className="text-xs">Stats</span>
+          </button>
+        </div>
+      </nav>
+    </div>
+  );
+}
+
+// Root App
+function App() {
+  return React.createElement(FlashCardsProvider, null, React.createElement(MobileFlashCardsApp, null));
+}
+
+// Render the app
+ReactDOM.render(React.createElement(App), document.getElementById('root'));
     </script>
     <script>
         // Register service worker
