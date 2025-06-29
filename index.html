@@ -260,9 +260,15 @@
                     if (line.match(/^Q\d+\)/)) {
                         // Save previous card if exists
                         if (currentQuestion && currentAnswer) {
+                            // Extract points from the complete question text before saving
+                            const fullQuestionPoints = currentQuestion.match(/\((\d+)pt\)/);
+                            if (fullQuestionPoints) {
+                                currentPoints = parseInt(fullQuestionPoints[1]);
+                            }
+                            
                             cards.push({
                                 id: questionNumber.toString(),
-                                question: currentQuestion.trim(),
+                                question: currentQuestion.replace(/\(\d+pt\)/, '').trim(),
                                 answer: currentAnswer.trim(),
                                 category: 'Theory Questions',
                                 tags: [],
@@ -281,22 +287,26 @@
                             questionNumber++;
                         }
                         
-                        // Extract points from the question
-                        const pointsMatch = line.match(/\((\d+)pt\)/);
-                        currentPoints = pointsMatch ? parseInt(pointsMatch[1]) : 1;
-                        
-                        // Remove the points notation from the question
-                        currentQuestion = line.replace(/\(\d+pt\)/, '').trim();
+                        // Start new question
+                        currentQuestion = line;
                         currentAnswer = '';
                         isAnswer = false;
+                        currentPoints = 1; // Reset to default
                     } else if (line.startsWith('Answer:')) {
                         isAnswer = true;
                         currentAnswer = line.replace('Answer:', '').trim();
                     } else if (line.length > 0) {
                         if (!isAnswer && currentQuestion && !line.match(/^Q\d+\)/)) {
-                            // This might be the start of an answer without "Answer:" prefix
-                            isAnswer = true;
-                            currentAnswer = line;
+                            // Check if this line contains points notation
+                            const pointsMatch = line.match(/\((\d+)pt\)/);
+                            if (pointsMatch) {
+                                // This is still part of the question
+                                currentQuestion += (currentQuestion ? '\n' : '') + line;
+                            } else {
+                                // This might be the start of an answer without "Answer:" prefix
+                                isAnswer = true;
+                                currentAnswer = line;
+                            }
                         } else if (isAnswer) {
                             currentAnswer += (currentAnswer ? '\n' : '') + line;
                         } else {
@@ -307,9 +317,15 @@
                 
                 // Don't forget the last card
                 if (currentQuestion && currentAnswer) {
+                    // Extract points from the complete question text
+                    const fullQuestionPoints = currentQuestion.match(/\((\d+)pt\)/);
+                    if (fullQuestionPoints) {
+                        currentPoints = parseInt(fullQuestionPoints[1]);
+                    }
+                    
                     cards.push({
                         id: questionNumber.toString(),
-                        question: currentQuestion.trim(),
+                        question: currentQuestion.replace(/\(\d+pt\)/, '').trim(),
                         answer: currentAnswer.trim(),
                         category: 'Theory Questions',
                         tags: [],
