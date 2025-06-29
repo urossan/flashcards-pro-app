@@ -1,10 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
+<!--
+Flash Cards Pro - Version History:
+v1.0 - Initial release with difficulty system (easy/medium/hard)
+v2.0 - Points system implementation (1-6pt) replacing difficulty levels
+     - Added study by points feature
+     - Added points filtering
+     - Enhanced statistics with points distribution
+     - Version number display in header
+v2.1 - Fixed question counting issues:
+     - Q19 and Q42 both properly counted as 5pt (was showing 1, now shows 2)
+     - Q3, Q23, Q55, Q69 all properly counted as 6pt (was showing 3, now shows 4)
+     - Total points corrected to 177
+-->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1f2937">
-    <title>Flash Cards Pro - Points & Gestures</title>
+    <title>Flash Cards Pro - Points System</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -38,47 +51,6 @@
             overflow: hidden; 
         }
         button:active { transform: scale(0.98); }
-        
-        /* Enhanced Animation Keyframes */
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px) translateX(-50%);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0) translateX(-50%);
-            }
-        }
-        
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 0.9;
-            }
-            50% {
-                opacity: 0.7;
-            }
-        }
-        
-        @keyframes bounce {
-            0%, 20%, 53%, 80%, 100% {
-                transform: translate3d(0,0,0);
-            }
-            40%, 43% {
-                transform: translate3d(0,-8px,0);
-            }
-            70% {
-                transform: translate3d(0,-4px,0);
-            }
-            90% {
-                transform: translate3d(0,-2px,0);
-            }
-        }
-        
-        .animate-bounce {
-            animation: bounce 1s infinite;
-        }
-        
         @media screen and (max-width: 768px) { 
             input, textarea, select { font-size: 16px !important; } 
         }
@@ -88,7 +60,7 @@
     <div id="root"></div>
     
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useCallback, createContext, useContext, useRef } = React;
+        const { useState, useEffect, useMemo, useCallback, createContext, useContext } = React;
 
         // Simple Icons
         const Icon = ({ name, className = "w-5 h-5" }) => {
@@ -105,16 +77,13 @@
             }, icons[name] || "📝");
         };
 
-        // Enhanced Text-to-Speech Service
+        // Text-to-Speech Service
         class SpeechService {
-            static currentUtterance = null;
-            static isPlaying = false;
-            
             static speak(text, settings = {}) {
                 if (!('speechSynthesis' in window) || !settings.speechEnabled) return;
                 
-                // Always cancel any ongoing speech first
-                this.stop();
+                // Cancel any ongoing speech
+                window.speechSynthesis.cancel();
                 
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.rate = settings.speechRate || 1.0;
@@ -129,33 +98,12 @@
                     }
                 }
                 
-                // Track the current utterance and state
-                this.currentUtterance = utterance;
-                this.isPlaying = true;
-                
-                // Handle speech events
-                utterance.onend = () => {
-                    this.currentUtterance = null;
-                    this.isPlaying = false;
-                };
-                
-                utterance.onerror = () => {
-                    this.currentUtterance = null;
-                    this.isPlaying = false;
-                };
-                
-                utterance.onstart = () => {
-                    this.isPlaying = true;
-                };
-                
                 window.speechSynthesis.speak(utterance);
             }
             
             static stop() {
                 if ('speechSynthesis' in window) {
                     window.speechSynthesis.cancel();
-                    this.currentUtterance = null;
-                    this.isPlaying = false;
                 }
             }
         }
@@ -170,7 +118,7 @@
 
         // Storage Service
         class StorageService {
-            static STORAGE_KEY = 'flashcards-pro-points-gestures';
+            static STORAGE_KEY = 'flashcards-pro-enhanced';
             
             static save(state) {
                 try {
@@ -195,7 +143,7 @@
             
             static exportData(state) {
                 const data = {
-                    version: '5.0-points-gestures',
+                    version: '3.0',
                     exported: new Date().toISOString(),
                     ...state,
                     categories: Array.from(state.categories),
@@ -205,7 +153,7 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `flashcards-points-gestures-${new Date().toISOString().split('T')[0]}.json`;
+                a.download = `flashcards-pro-${new Date().toISOString().split('T')[0]}.json`;
                 a.click();
                 URL.revokeObjectURL(url);
             }
@@ -260,15 +208,9 @@
                     if (line.match(/^Q\d+\)/)) {
                         // Save previous card if exists
                         if (currentQuestion && currentAnswer) {
-                            // Extract points from the complete question text before saving
-                            const fullQuestionPoints = currentQuestion.match(/\((\d+)pt\)/);
-                            if (fullQuestionPoints) {
-                                currentPoints = parseInt(fullQuestionPoints[1]);
-                            }
-                            
                             cards.push({
                                 id: questionNumber.toString(),
-                                question: currentQuestion.replace(/\(\d+pt\)/, '').trim(),
+                                question: currentQuestion.trim(),
                                 answer: currentAnswer.trim(),
                                 category: 'Theory Questions',
                                 tags: [],
@@ -287,26 +229,22 @@
                             questionNumber++;
                         }
                         
-                        // Start new question
-                        currentQuestion = line;
+                        // Extract points from the question
+                        const pointsMatch = line.match(/\((\d+)pt\)/);
+                        currentPoints = pointsMatch ? parseInt(pointsMatch[1]) : 1;
+                        
+                        // Remove the points notation from the question
+                        currentQuestion = line.replace(/\(\d+pt\)/, '').trim();
                         currentAnswer = '';
                         isAnswer = false;
-                        currentPoints = 1; // Reset to default
                     } else if (line.startsWith('Answer:')) {
                         isAnswer = true;
                         currentAnswer = line.replace('Answer:', '').trim();
                     } else if (line.length > 0) {
                         if (!isAnswer && currentQuestion && !line.match(/^Q\d+\)/)) {
-                            // Check if this line contains points notation
-                            const pointsMatch = line.match(/\((\d+)pt\)/);
-                            if (pointsMatch) {
-                                // This is still part of the question
-                                currentQuestion += (currentQuestion ? '\n' : '') + line;
-                            } else {
-                                // This might be the start of an answer without "Answer:" prefix
-                                isAnswer = true;
-                                currentAnswer = line;
-                            }
+                            // This might be the start of an answer without "Answer:" prefix
+                            isAnswer = true;
+                            currentAnswer = line;
                         } else if (isAnswer) {
                             currentAnswer += (currentAnswer ? '\n' : '') + line;
                         } else {
@@ -317,15 +255,9 @@
                 
                 // Don't forget the last card
                 if (currentQuestion && currentAnswer) {
-                    // Extract points from the complete question text
-                    const fullQuestionPoints = currentQuestion.match(/\((\d+)pt\)/);
-                    if (fullQuestionPoints) {
-                        currentPoints = parseInt(fullQuestionPoints[1]);
-                    }
-                    
                     cards.push({
                         id: questionNumber.toString(),
-                        question: currentQuestion.replace(/\(\d+pt\)/, '').trim(),
+                        question: currentQuestion.trim(),
                         answer: currentAnswer.trim(),
                         category: 'Theory Questions',
                         tags: [],
@@ -531,8 +463,7 @@ Q41)What are the types of warning indicated by RCI and at what point are they ac
 Answer: AMBER 90-97.6%
 RED light with external alarm 102.5-110%
 
-Q42)a) Where would the duty board of a tower crane normally be located and
-b) Name FOUR types of information that it must contain (5pt)
+Q42)a) Where would the duty board of a tower crane normally be located and b) Name FOUR types of information that it must contain(5pt)
 Answer: a) Located at the base of the tower crane
 b)
 1. Make
@@ -594,7 +525,7 @@ Answer: 1. Design Checker
 3. Date design checked/approved
 4. Erection complete and checked or "Permit to Load", "Permit to Dismantle"
 
-Q55)a) What is the recommended minimum exclusion zone around overhead power lines,(6pt)
+Q55)a) What is the recommended minimum exclusion zone around overhead power lines(6pt)
 b) Where can this information be sourced and
 c) Explain why a distance from overhead power lines should be kept.
 Answer: a) 	275KW-400KW 7M
@@ -789,115 +720,47 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             );
         }
 
-        // Mobile Study Card with Fullscreen
-        function MobileStudyCard({ card, isFlipped, onFlip, isFullscreen, onToggleFullscreen }) {
+        // Mobile Study Card - Clean and Spacious
+        function MobileStudyCard({ card, isFlipped, onFlip }) {
             const { state: { theme, settings } } = useFlashCards();
-            const speechTimeoutRef = useRef(null);
-            const lastCardIdRef = useRef(null);
-            const lastFlippedRef = useRef(null);
             
-            // Clean question text by removing Q1), Q2), etc.
-            const cleanQuestion = card.question.replace(/^Q\d+\)\s*/, '');
-            
-            // Clear speech function
-            const clearSpeech = useCallback(() => {
-                SpeechService.stop();
-                if (speechTimeoutRef.current) {
-                    clearTimeout(speechTimeoutRef.current);
-                    speechTimeoutRef.current = null;
-                }
-            }, []);
-            
-            // Speech effect
+            // Auto-read when card loads or flips
             useEffect(() => {
-                clearSpeech();
-                
-                if (!settings.speechEnabled) return;
-                
-                const isCardChange = lastCardIdRef.current !== card.id;
-                const isFlipChange = lastFlippedRef.current !== isFlipped;
-                
-                lastCardIdRef.current = card.id;
-                lastFlippedRef.current = isFlipped;
-                
-                if (isCardChange) {
-                    if (settings.autoReadQuestion) {
-                        speechTimeoutRef.current = setTimeout(() => {
-                            if (lastCardIdRef.current === card.id && !isFlipped) {
-                                SpeechService.speak(cleanQuestion, settings);
-                            }
-                            speechTimeoutRef.current = null;
+                if (settings.speechEnabled) {
+                    if (isFlipped && settings.autoReadAnswer) {
+                        // Small delay to let flip animation complete
+                        setTimeout(() => {
+                            SpeechService.speak(card.answer, settings);
+                        }, 600);
+                    } else if (!isFlipped && settings.autoReadQuestion) {
+                        setTimeout(() => {
+                            SpeechService.speak(card.question, settings);
                         }, 300);
                     }
-                    return;
                 }
-                
-                if (isFlipChange) {
-                    const delay = 500;
-                    speechTimeoutRef.current = setTimeout(() => {
-                        if (lastCardIdRef.current === card.id && lastFlippedRef.current === isFlipped) {
-                            if (isFlipped && settings.autoReadAnswer) {
-                                SpeechService.speak(card.answer, settings);
-                            } else if (!isFlipped && settings.autoReadQuestion) {
-                                SpeechService.speak(cleanQuestion, settings);
-                            }
-                        }
-                        speechTimeoutRef.current = null;
-                    }, delay);
-                }
-            }, [card.id, isFlipped, settings.speechEnabled, settings.autoReadQuestion, settings.autoReadAnswer, clearSpeech, cleanQuestion]);
-            
-            useEffect(() => {
-                return () => {
-                    clearSpeech();
-                };
-            }, [clearSpeech]);
-            
-            const handleCardClick = () => {
-                clearSpeech();
-                onFlip();
-            };
+            }, [isFlipped, card, settings]);
             
             return (
-                <div className={`relative w-full ${isFullscreen ? 'h-screen' : 'h-[28rem]'} perspective-1000`}>
-                    <div 
-                        className={`relative w-full h-full transition-transform duration-500 transform-style-preserve-3d cursor-pointer ${
-                            isFlipped ? 'rotate-y-180' : ''
-                        }`}
-                        onClick={handleCardClick}
-                    >
+                <div className="relative w-full h-[28rem] perspective-1000" onClick={onFlip}>
+                    <div className={`relative w-full h-full transition-transform duration-500 transform-style-preserve-3d cursor-pointer ${
+                        isFlipped ? 'rotate-y-180' : ''
+                    }`}>
                         <div className={`absolute inset-0 backface-hidden rounded-2xl p-8 flex flex-col ${
                             theme === 'dark' 
                                 ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
                                 : 'bg-gradient-to-br from-white to-gray-100'
                         } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                             
-                            <div className="absolute top-4 left-4">
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onToggleFullscreen();
-                                    }}
-                                    className={`p-2 rounded-lg ${
-                                        theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
-                                    }`}
-                                >
-                                    {isFullscreen ? '↙️' : '↗️'}
-                                </button>
-                            </div>
-                            
-                            {/* Subtle points badge */}
                             <div className="absolute top-4 right-4">
-                                <span className={`text-xs px-2 py-1 rounded-full opacity-50 ${
-                                    theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
-                                }`}>
+                                <span className={`text-sm px-3 py-1 rounded-full flex items-center gap-1 ${getPointsColor(card.points || 1)}`}>
+                                    <Icon name="points" className="w-4 h-4" />
                                     {card.points || 1}pt
                                 </span>
                             </div>
                             
                             <div className="flex-1 overflow-y-auto px-2 py-4 flex items-center justify-center">
                                 <div className="text-center w-full">
-                                    <h2 className={`${isFullscreen ? 'text-2xl' : 'text-lg'} font-medium leading-relaxed`}>{cleanQuestion}</h2>
+                                    <h2 className="text-lg font-medium leading-relaxed">{card.question}</h2>
                                 </div>
                             </div>
                             
@@ -912,32 +775,16 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                 : 'bg-gradient-to-br from-blue-50 to-blue-100'
                         } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                             
-                            <div className="absolute top-4 left-4">
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onToggleFullscreen();
-                                    }}
-                                    className={`p-2 rounded-lg ${
-                                        theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
-                                    }`}
-                                >
-                                    {isFullscreen ? '↙️' : '↗️'}
-                                </button>
-                            </div>
-                            
-                            {/* Subtle points badge */}
                             <div className="absolute top-4 right-4">
-                                <span className={`text-xs px-2 py-1 rounded-full opacity-50 ${
-                                    theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
-                                }`}>
+                                <span className={`text-sm px-3 py-1 rounded-full flex items-center gap-1 ${getPointsColor(card.points || 1)}`}>
+                                    <Icon name="points" className="w-4 h-4" />
                                     {card.points || 1}pt
                                 </span>
                             </div>
                             
                             <div className="flex-1 overflow-y-auto px-2 py-4 flex items-start justify-center">
                                 <div className="text-center w-full">
-                                    <h2 className={`${isFullscreen ? 'text-2xl' : 'text-lg'} font-medium leading-relaxed whitespace-pre-line`}>{card.answer}</h2>
+                                    <h2 className="text-lg font-medium leading-relaxed whitespace-pre-line">{card.answer}</h2>
                                 </div>
                             </div>
                             
@@ -950,625 +797,8 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             );
         }
 
-        // **NEW** Fullscreen Study Mode with Enhanced Animations and Gestures
-        function FullscreenStudyMode({ cards, currentIndex, isFlipped, onFlip, onNavigate, onExit }) {
-            const { state: { theme, settings } } = useFlashCards();
-            const touchStartRef = useRef({ x: 0, y: 0 });
-            const touchEndRef = useRef({ x: 0, y: 0 });
-            const [showHints, setShowHints] = useState(true);
-            const [slideDirection, setSlideDirection] = useState('');
-            const [isSliding, setIsSliding] = useState(false);
-            const [animationPhase, setAnimationPhase] = useState('idle'); // 'idle', 'slide-out', 'slide-in'
-            const [isTransitioning, setIsTransitioning] = useState(false); // For fade transition
-            const [dragOffset, setDragOffset] = useState(0); // For peek animation
-            const [isDragging, setIsDragging] = useState(false);
-            
-            const currentCard = cards[currentIndex];
-            const hasNext = currentIndex < cards.length - 1;
-            const hasPrev = currentIndex > 0;
-            const nextCard = hasNext ? cards[currentIndex + 1] : null;
-            const prevCard = hasPrev ? cards[currentIndex - 1] : null;
-            
-            // Clean question text by removing Q1), Q2), etc.
-            const cleanQuestion = currentCard.question.replace(/^Q\d+\)\s*/, '');
-            
-            // Peek thresholds
-            const PEEK_THRESHOLD = 50; // Minimum drag for peek
-            const NAVIGATE_THRESHOLD = 120; // Minimum drag for navigation
-            
-            // Hide hints after 3 seconds
-            useEffect(() => {
-                const timer = setTimeout(() => setShowHints(false), 3000);
-                return () => clearTimeout(timer);
-            }, [currentIndex]);
-            
-            // Reset drag offset when navigation happens
-            useEffect(() => {
-                setDragOffset(0);
-                setIsDragging(false);
-            }, [currentIndex]);
-            
-            // Reset drag offset when card flips
-            useEffect(() => {
-                setDragOffset(0);
-            }, [isFlipped]);
-            
-            // Speech effect for fullscreen mode
-            useEffect(() => {
-                SpeechService.stop();
-                
-                if (settings.speechEnabled && !isSliding && animationPhase === 'idle') {
-                    setTimeout(() => {
-                        if (!isFlipped && settings.autoReadQuestion) {
-                            SpeechService.speak(cleanQuestion, settings);
-                        } else if (isFlipped && settings.autoReadAnswer) {
-                            SpeechService.speak(currentCard.answer, settings);
-                        }
-                    }, 300);
-                }
-            }, [currentIndex, isFlipped, settings, isSliding, animationPhase, cleanQuestion]);
-            
-            // Enhanced navigation with staggered slide animation
-            const handleNavigateWithAnimation = (newIndex, direction) => {
-                if (isSliding || animationPhase !== 'idle') return; // Prevent multiple animations
-                
-                setIsSliding(true);
-                setSlideDirection(direction);
-                setAnimationPhase('slide-out');
-                
-                // Phase 1: Slide out current card (250ms)
-                setTimeout(() => {
-                    onNavigate(newIndex);
-                    setAnimationPhase('slide-in');
-                    
-                    // Phase 2: Slide in new card (250ms)
-                    setTimeout(() => {
-                        setSlideDirection('');
-                        setIsSliding(false);
-                        setAnimationPhase('idle');
-                    }, 250);
-                }, 250);
-            };
-            
-            const handleCardClick = () => {
-                if (isSliding || animationPhase !== 'idle' || isTransitioning) return; // Prevent clicks during animations
-                
-                SpeechService.stop();
-                setIsTransitioning(true);
-                
-                // Fade transition: fade out, flip state, then fade in
-                setTimeout(() => {
-                    onFlip();
-                    setTimeout(() => {
-                        setIsTransitioning(false);
-                    }, 200); // Fade in duration
-                }, 200); // Fade out duration
-            };
-            
-            // Enhanced slide animation calculations
-            const getSlideTransform = () => {
-                if (animationPhase === 'slide-out') {
-                    return slideDirection === 'left' 
-                        ? 'translateX(-120%) translateZ(-200px) rotateY(-15deg) scale(0.8)'
-                        : 'translateX(120%) translateZ(-200px) rotateY(15deg) scale(0.8)';
-                } else if (animationPhase === 'slide-in') {
-                    return slideDirection === 'left'
-                        ? 'translateX(120%) translateZ(-200px) rotateY(15deg) scale(0.8)'
-                        : 'translateX(-120%) translateZ(-200px) rotateY(-15deg) scale(0.8)';
-                }
-                return 'translateX(0) translateZ(0) rotateY(0deg) scale(1)';
-            };
-            
-            const getSlideOpacity = () => {
-                if (animationPhase === 'slide-out') return 0;
-                if (animationPhase === 'slide-in') return 0.7;
-                return 1;
-            };
-            
-            // Touch handlers for gestures with peek animation
-            const handleTouchStart = (e) => {
-                const touch = e.touches[0];
-                touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-                setShowHints(false);
-                setIsDragging(true);
-                
-                // Add subtle touch feedback
-                e.currentTarget.style.transform = 'scale(0.99)';
-                e.currentTarget.style.transition = 'transform 0.1s ease-out';
-            };
-            
-            const handleTouchMove = (e) => {
-                if (!isDragging || isSliding || animationPhase !== 'idle' || isTransitioning) return;
-                
-                const touch = e.touches[0];
-                const deltaX = touch.clientX - touchStartRef.current.x;
-                
-                // Update drag offset for peek effect
-                setDragOffset(deltaX);
-            };
-            
-            const handleTouchEnd = (e) => {
-                // Remove touch feedback
-                e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.transition = 'transform 0.2s ease-out';
-                
-                setIsDragging(false);
-                
-                if (isSliding || animationPhase !== 'idle' || isTransitioning) return;
-                
-                const touch = e.changedTouches[0];
-                touchEndRef.current = { x: touch.clientX, y: touch.clientY };
-                
-                const deltaX = touchEndRef.current.x - touchStartRef.current.x;
-                const deltaY = touchEndRef.current.y - touchStartRef.current.y;
-                
-                const minSwipeDistance = 50;
-                
-                // Reset drag offset
-                setDragOffset(0);
-                
-                // Determine gesture type
-                if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > minSwipeDistance) {
-                    // Vertical swipe
-                    if (deltaY > 0) {
-                        // Swipe down - exit fullscreen with fade effect
-                        SpeechService.stop();
-                        e.currentTarget.style.opacity = '0';
-                        e.currentTarget.style.transform = 'scale(0.9) translateY(20px)';
-                        e.currentTarget.style.transition = 'all 0.3s ease-out';
-                        setTimeout(() => onExit(), 200);
-                    }
-                } else if (Math.abs(deltaX) > NAVIGATE_THRESHOLD) {
-                    // Large horizontal swipe - navigate
-                    SpeechService.stop();
-                    if (deltaX > 0) {
-                        // Swipe right - previous card
-                        if (currentIndex > 0) {
-                            handleNavigateWithAnimation(currentIndex - 1, 'right');
-                        }
-                    } else {
-                        // Swipe left - next card
-                        if (currentIndex < cards.length - 1) {
-                            handleNavigateWithAnimation(currentIndex + 1, 'left');
-                        }
-                    }
-                } else if (Math.abs(deltaX) < 30 && Math.abs(deltaY) < 30) {
-                    // Small movement - flip card
-                    handleCardClick();
-                }
-                // Medium swipes (between peek and navigate) do nothing - just return to center
-            };
-            
-            return (
-                <div className={`fixed inset-0 z-50 ${
-                    theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'
-                } flex flex-col`}>
-                    {/* Header with counter */}
-                    <div className={`flex justify-between items-center p-4 ${
-                        theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-                    } border-b`}>
-                        <div className="text-lg font-semibold">
-                            {currentIndex + 1} / {cards.length}
-                        </div>
-                        <div className="flex items-center gap-4">
-                            {/* Subtle points display */}
-                            <span className={`text-sm opacity-50 ${
-                                theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                            }`}>
-                                {currentCard.points || 1}pt
-                            </span>
-                            <button
-                                onClick={onExit}
-                                className={`p-2 rounded-lg ${
-                                    theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                }`}
-                            >
-                                ✕
-                            </button>
-                        </div>
-                    </div>
-                    
-                    {/* Progress bar */}
-                    <div className={`h-1 ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'}`}>
-                        <div
-                            className="h-full bg-blue-500 transition-all duration-300"
-                            style={{ width: `${((currentIndex + 1) / cards.length) * 100}%` }}
-                        />
-                    </div>
-                    
-                    {/* Main card area with peek animation */}
-                    <div 
-                        className="flex-1 flex items-center justify-center p-4 perspective-1000 relative overflow-hidden"
-                        onTouchStart={handleTouchStart}
-                        onTouchMove={handleTouchMove}
-                        onTouchEnd={handleTouchEnd}
-                    >
-                        {/* Previous card preview (right side when dragging right) */}
-                        {prevCard && Math.abs(dragOffset) > PEEK_THRESHOLD && dragOffset > 0 && (
-                            <div 
-                                className="absolute left-0 top-0 w-full h-full flex items-center justify-center p-4"
-                                style={{
-                                    transform: `translateX(${Math.min(dragOffset - 100, 0)}px) scale(2)`,
-                                    opacity: Math.min(Math.abs(dragOffset) / NAVIGATE_THRESHOLD, 0.8),
-                                    transformOrigin: 'center center'
-                                }}
-                            >
-                                <div className={`w-full max-w-2xl h-full rounded-3xl p-8 flex flex-col ${
-                                    theme === 'dark' 
-                                        ? 'bg-gradient-to-br from-gray-700 via-gray-800 to-gray-700 text-white' 
-                                        : 'bg-gradient-to-br from-gray-100 via-gray-200 to-gray-100'
-                                } shadow-xl overflow-hidden border-2 ${
-                                    theme === 'dark' ? 'border-gray-500' : 'border-gray-300'
-                                }`}>
-                                    <div className="text-center mb-4">
-                                        <div className="text-2xl font-light tracking-widest opacity-60">
-                                            QUESTION {currentIndex}
-                                        </div>
-                                    </div>
-                                    {/* No text content during peek */}
-                                </div>
-                            </div>
-                        )}
-                        
-                        {/* Next card preview (left side when dragging left) */}
-                        {nextCard && Math.abs(dragOffset) > PEEK_THRESHOLD && dragOffset < 0 && (
-                            <div 
-                                className="absolute right-0 top-0 w-full h-full flex items-center justify-center p-4"
-                                style={{
-                                    transform: `translateX(${Math.max(dragOffset + 100, 0)}px) scale(2)`,
-                                    opacity: Math.min(Math.abs(dragOffset) / NAVIGATE_THRESHOLD, 0.8),
-                                    transformOrigin: 'center center'
-                                }}
-                            >
-                                <div className={`w-full max-w-2xl h-full rounded-3xl p-8 flex flex-col ${
-                                    theme === 'dark' 
-                                        ? 'bg-gradient-to-br from-gray-700 via-gray-800 to-gray-700 text-white' 
-                                        : 'bg-gradient-to-br from-gray-100 via-gray-200 to-gray-100'
-                                } shadow-xl overflow-hidden border-2 ${
-                                    theme === 'dark' ? 'border-gray-500' : 'border-gray-300'
-                                }`}>
-                                    <div className="text-center mb-4">
-                                        <div className="text-2xl font-light tracking-widest opacity-60">
-                                            QUESTION {currentIndex + 2}
-                                        </div>
-                                    </div>
-                                    {/* No text content during peek */}
-                                </div>
-                            </div>
-                        )}
-                        
-                        {/* Big question numbers when dragging */}
-                        {Math.abs(dragOffset) > PEEK_THRESHOLD && (
-                            <>
-                                {/* Previous question number (when dragging right) */}
-                                {dragOffset > 0 && hasPrev && (
-                                    <div 
-                                        className="absolute left-8 top-1/2 transform -translate-y-1/2 pointer-events-none z-20"
-                                        style={{
-                                            opacity: Math.min(Math.abs(dragOffset) / NAVIGATE_THRESHOLD, 0.8)
-                                        }}
-                                    >
-                                        <div className={`text-20xl font-bold ${
-                                            theme === 'dark' ? 'text-white' : 'text-gray-800'
-                                        }`} style={{ fontSize: '10rem', lineHeight: '1' }}>
-                                            {currentIndex}
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                {/* Next question number (when dragging left) */}
-                                {dragOffset < 0 && hasNext && (
-                                    <div 
-                                        className="absolute right-8 top-1/2 transform -translate-y-1/2 pointer-events-none z-20"
-                                        style={{
-                                            opacity: Math.min(Math.abs(dragOffset) / NAVIGATE_THRESHOLD, 0.8)
-                                        }}
-                                    >
-                                        <div className={`text-20xl font-bold ${
-                                            theme === 'dark' ? 'text-white' : 'text-gray-800'
-                                        }`} style={{ fontSize: '10rem', lineHeight: '1' }}>
-                                            {currentIndex + 2}
-                                        </div>
-                                    </div>
-                                )}
-                            </>
-                        )}
-                        
-                        {/* Main current card */}
-                        <div 
-                            className={`relative w-full max-w-2xl h-full cursor-pointer transition-all duration-300 ease-out z-10`}
-                            style={{
-                                transform: `${getSlideTransform()} translateX(${Math.max(-50, Math.min(50, dragOffset * 0.3))}px)`,
-                                transition: isDragging ? 'none' : 'all 0.5s cubic-bezier(0.4, 0.0, 0.2, 1)',
-                                filter: animationPhase !== 'idle' ? 'blur(1px)' : 'blur(0px)',
-                                opacity: getSlideOpacity()
-                            }}
-                            onClick={handleCardClick}
-                        >
-                            {/* Single card container with fade transition */}
-                            <div className={`w-full h-full rounded-3xl p-8 flex flex-col ${
-                                theme === 'dark' 
-                                    ? 'bg-gradient-to-br from-gray-800 via-gray-900 to-gray-800 text-white' 
-                                    : 'bg-gradient-to-br from-white via-gray-50 to-white'
-                            } shadow-2xl overflow-hidden border-2 ${
-                                theme === 'dark' ? 'border-gray-600' : 'border-gray-200'
-                            } transition-opacity duration-200`}
-                            style={{
-                                opacity: isTransitioning ? 0.3 : 1,
-                                boxShadow: `
-                                    0 25px 50px -12px rgba(0, 0, 0, 0.25),
-                                    0 0 30px rgba(59, 130, 246, ${isTransitioning ? '0.3' : '0.1'})
-                                `
-                            }}>
-                                {/* Enhanced label with dynamic numbering - 50% bigger */}
-                                <div className="text-center mb-4">
-                                    <div className={`text-2xl font-light tracking-widest transition-all duration-300 ${
-                                        isTransitioning ? 'opacity-20 scale-95' : 'opacity-40'
-                                    }`}
-                                    style={{
-                                        textShadow: isTransitioning ? '0 0 20px rgba(59, 130, 246, 0.5)' : 'none'
-                                    }}>
-                                        {isFlipped ? `ANSWER ${currentIndex + 1}` : `QUESTION ${currentIndex + 1}`}
-                                    </div>
-                                </div>
-                                
-                                {/* Content back to original size */}
-                                <div className="flex-1 overflow-y-auto flex items-center justify-center">
-                                    <div className="text-center w-full">
-                                        <h2 className={`text-xl md:text-2xl font-medium leading-relaxed whitespace-pre-line transition-all duration-300 ${
-                                            isTransitioning ? 'opacity-30 scale-98' : 'opacity-100 scale-100'
-                                        }`}>
-                                            {isFlipped ? currentCard.answer : cleanQuestion}
-                                        </h2>
-                                    </div>
-                                </div>
-                                
-                                {/* Page numbers without triangular corners */}
-                                {hasPrev && (
-                                    <div className="absolute bottom-4 left-4">
-                                        <div className="text-xs font-bold text-gray-600 dark:text-gray-300">
-                                            {currentIndex}
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                {hasNext && (
-                                    <div className="absolute bottom-4 right-4">
-                                        <div className="text-xs font-bold text-gray-600 dark:text-gray-300">
-                                            {currentIndex + 2}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                    
-                    {/* Enhanced gesture hints with animation */}
-                    {showHints && (
-                        <div className={`absolute bottom-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-2xl ${
-                            theme === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-white text-gray-600'
-                        } shadow-xl text-sm text-center backdrop-blur-md bg-opacity-90 border border-opacity-20 ${
-                            theme === 'dark' ? 'border-gray-600' : 'border-gray-300'
-                        } animate-pulse`}
-                        style={{
-                            animation: 'fadeInUp 0.5s ease-out, pulse 2s infinite',
-                            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 0 20px rgba(59, 130, 246, 0.1)'
-                        }}>
-                            <div className="flex items-center justify-center gap-1 text-xs">
-                                <span className="animate-bounce">👆</span> Tap to flip • 
-                                <span className="animate-bounce" style={{animationDelay: '0.1s'}}>←</span> 
-                                <span className="animate-bounce" style={{animationDelay: '0.2s'}}>→</span> Drag to peek • 
-                                <span className="animate-bounce" style={{animationDelay: '0.3s'}}>↓</span> Swipe down to exit
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        // Study Mode Component (simplified without "I knew it/Didn't know")
-        function MobileStudyMode({ cards, onComplete }) {
-            const { state: { theme } } = useFlashCards();
-            const [currentIndex, setCurrentIndex] = useState(0);
-            const [isFlipped, setIsFlipped] = useState(false);
-            const [isFullscreen, setIsFullscreen] = useState(false);
-            const [startTime] = useState(Date.now());
-            const [showCompletePrompt, setShowCompletePrompt] = useState(false);
-            
-            const currentCard = cards[currentIndex];
-            const progress = ((currentIndex + 1) / cards.length) * 100;
-            
-            // Calculate total points
-            const totalPoints = useMemo(() => {
-                return cards.reduce((sum, card) => sum + (card.points || 1), 0);
-            }, [cards]);
-            
-            // Stop speech when component unmounts or session ends
-            useEffect(() => {
-                return () => {
-                    SpeechService.stop();
-                };
-            }, []);
-            
-            useEffect(() => {
-                if (showCompletePrompt) {
-                    SpeechService.stop();
-                }
-            }, [showCompletePrompt]);
-            
-            useEffect(() => {
-                SpeechService.stop();
-            }, [currentIndex]);
-            
-            const handleFlip = () => {
-                setIsFlipped(!isFlipped);
-            };
-            
-            const handleNavigate = (newIndex) => {
-                if (newIndex >= 0 && newIndex < cards.length) {
-                    setCurrentIndex(newIndex);
-                    setIsFlipped(false);
-                }
-            };
-            
-            const handleNext = () => {
-                if (currentIndex < cards.length - 1) {
-                    handleNavigate(currentIndex + 1);
-                } else {
-                    setShowCompletePrompt(true);
-                }
-            };
-            
-            const handleComplete = () => {
-                const duration = Math.floor((Date.now() - startTime) / 1000);
-                SpeechService.stop();
-                onComplete({ 
-                    correct: cards.length,
-                    incorrect: 0, 
-                    duration 
-                });
-            };
-            
-            const handleFullscreen = () => {
-                setIsFullscreen(true);
-            };
-            
-            const handleExitFullscreen = () => {
-                setIsFullscreen(false);
-            };
-            
-            if (!currentCard) {
-                return (
-                    <div className="flex items-center justify-center h-96">
-                        <div className="text-center">
-                            <Icon name="study" className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                            <p className="text-lg">No cards to study</p>
-                        </div>
-                    </div>
-                );
-            }
-            
-            // **FULLSCREEN MODE**
-            if (isFullscreen) {
-                return (
-                    <FullscreenStudyMode
-                        cards={cards}
-                        currentIndex={currentIndex}
-                        isFlipped={isFlipped}
-                        onFlip={handleFlip}
-                        onNavigate={handleNavigate}
-                        onExit={handleExitFullscreen}
-                    />
-                );
-            }
-            
-            return (
-                <div className="space-y-4 pb-6">
-                    <div className="p-4 rounded-xl">
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="text-sm font-medium">
-                                Question {currentIndex + 1} of {cards.length}
-                            </span>
-                            <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-1">
-                                    <Icon name="points" className="w-4 h-4 text-blue-500" />
-                                    <span className="text-sm font-medium">{totalPoints}pt total</span>
-                                </div>
-                                {/* **FULLSCREEN BUTTON** */}
-                                <button
-                                    onClick={handleFullscreen}
-                                    className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                                        theme === 'dark' 
-                                            ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
-                                            : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                                    } transition-colors`}
-                                >
-                                    🔳 Fullscreen
-                                </button>
-                            </div>
-                        </div>
-                        <div className={`h-2 rounded-full overflow-hidden ${
-                            theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
-                        }`}>
-                            <div
-                                className="h-full bg-blue-500 transition-all duration-500"
-                                style={{ width: `${progress}%` }}
-                            />
-                        </div>
-                    </div>
-                    
-                    <div className="px-4">
-                        <MobileStudyCard
-                            card={currentCard}
-                            isFlipped={isFlipped}
-                            onFlip={handleFlip}
-                            isFullscreen={false}
-                            onToggleFullscreen={handleFullscreen}
-                        />
-                    </div>
-                    
-                    <div className="px-4">
-                        <div className="grid grid-cols-2 gap-3">
-                            <button
-                                onClick={() => handleNavigate(currentIndex - 1)}
-                                disabled={currentIndex === 0}
-                                className={`py-3 rounded-xl border font-medium transition-all ${
-                                    currentIndex === 0
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : theme === 'dark'
-                                        ? 'border-gray-700 hover:bg-gray-800'
-                                        : 'border-gray-300 hover:bg-gray-100'
-                                }`}
-                            >
-                                ← Previous
-                            </button>
-                            <button
-                                onClick={handleNext}
-                                className="py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium transition-all"
-                            >
-                                {currentIndex === cards.length - 1 ? 'Complete' : 'Next →'}
-                            </button>
-                        </div>
-                    </div>
-                    
-                    {showCompletePrompt && (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                            <div className={`w-full max-w-sm rounded-2xl p-6 ${
-                                theme === 'dark' ? 'bg-gray-900' : 'bg-white'
-                            }`}>
-                                <h3 className="text-xl font-semibold mb-4 text-center">Session Complete! 🎉</h3>
-                                <div className="space-y-3 mb-6">
-                                    <div className="flex justify-between">
-                                        <span>Cards reviewed:</span>
-                                        <span className="font-medium">{cards.length}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Total points:</span>
-                                        <span className="font-medium">{totalPoints}pt</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Time spent:</span>
-                                        <span className="font-medium">
-                                            {Math.floor((Date.now() - startTime) / 60000)}m {Math.floor(((Date.now() - startTime) % 60000) / 1000)}s
-                                        </span>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={handleComplete}
-                                    className="w-full py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
-                                >
-                                    Finish Session
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
         // Points Selection Modal
         function PointsSelectionModal({ onSelect, onCancel, availablePoints, theme }) {
-            const { state: { cards } } = useFlashCards();
             const [selectedPoints, setSelectedPoints] = useState([]);
             
             const togglePoint = (point) => {
@@ -1587,60 +817,34 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 setSelectedPoints([]);
             };
             
-            const getCardCountForPoints = (points) => {
-                return cards.filter(card => (card.points || 1) === points).length;
-            };
-            
-            const getSelectedCardCount = () => {
-                return cards.filter(card => selectedPoints.includes(card.points || 1)).length;
-            };
-            
             return (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className={`w-full max-w-sm rounded-2xl p-6 ${
                         theme === 'dark' ? 'bg-gray-900' : 'bg-white'
                     }`}>
-                        <h3 className="text-xl font-semibold mb-2">Study by Points 🏆</h3>
+                        <h3 className="text-xl font-semibold mb-4">Select Point Values</h3>
                         <p className={`text-sm mb-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Select which point values to practice. For example, choose only 5pt questions for a challenging session!
+                            Choose which point values to study:
                         </p>
                         
                         <div className="grid grid-cols-3 gap-3 mb-4">
-                            {availablePoints.map(point => {
-                                const count = getCardCountForPoints(point);
-                                return (
-                                    <button
-                                        key={point}
-                                        onClick={() => togglePoint(point)}
-                                        className={`relative py-3 rounded-xl border transition-all ${
-                                            selectedPoints.includes(point)
-                                                ? getPointsColor(point) + ' border-transparent'
-                                                : theme === 'dark'
-                                                ? 'border-gray-700 hover:border-gray-600'
-                                                : 'border-gray-300 hover:border-gray-400'
-                                        }`}
-                                    >
-                                        <div className="flex flex-col items-center">
-                                            <div className="flex items-center gap-1">
-                                                <Icon name="points" className="w-4 h-4" />
-                                                <span className="font-medium">{point}pt</span>
-                                            </div>
-                                            <span className="text-xs opacity-75 mt-1">{count} cards</span>
-                                        </div>
-                                    </button>
-                                );
-                            })}
+                            {availablePoints.map(point => (
+                                <button
+                                    key={point}
+                                    onClick={() => togglePoint(point)}
+                                    className={`py-3 rounded-xl border transition-all ${
+                                        selectedPoints.includes(point)
+                                            ? getPointsColor(point) + ' border-transparent'
+                                            : theme === 'dark'
+                                            ? 'border-gray-700 hover:border-gray-600'
+                                            : 'border-gray-300 hover:border-gray-400'
+                                    }`}
+                                >
+                                    <Icon name="points" className="w-4 h-4 inline mr-1" />
+                                    {point}pt
+                                </button>
+                            ))}
                         </div>
-                        
-                        {selectedPoints.length > 0 && (
-                            <div className={`text-center mb-4 p-2 rounded-lg ${
-                                theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
-                            }`}>
-                                <span className="text-sm">
-                                    Selected: {getSelectedCardCount()} cards
-                                </span>
-                            </div>
-                        )}
                         
                         <div className="flex gap-2 mb-4">
                             <button
@@ -1677,10 +881,210 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                 disabled={selectedPoints.length === 0}
                                 className="flex-1 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
                             >
-                                Start Study
+                                Study ({selectedPoints.length} selected)
                             </button>
                         </div>
                     </div>
+                </div>
+            );
+        }
+
+        // Study Mode Component
+        function MobileStudyMode({ cards, onComplete }) {
+            const { state: { theme } } = useFlashCards();
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [isFlipped, setIsFlipped] = useState(false);
+            const [results, setResults] = useState({ correct: 0, incorrect: 0 });
+            const [startTime] = useState(Date.now());
+            const [showCompletePrompt, setShowCompletePrompt] = useState(false);
+            const [isProcessing, setIsProcessing] = useState(false);
+            
+            const currentCard = cards[currentIndex];
+            const progress = ((currentIndex + 1) / cards.length) * 100;
+            
+            // Calculate total points
+            const totalPoints = useMemo(() => {
+                return cards.reduce((sum, card) => sum + (card.points || 1), 0);
+            }, [cards]);
+            
+            const earnedPoints = useMemo(() => {
+                return cards.slice(0, currentIndex).reduce((sum, card, idx) => {
+                    if (results.correct > idx) return sum + (card.points || 1);
+                    return sum;
+                }, 0);
+            }, [cards, currentIndex, results]);
+            
+            // Stop speech when component unmounts or session ends
+            useEffect(() => {
+                return () => {
+                    SpeechService.stop();
+                };
+            }, []);
+            
+            const handleResponse = (isCorrect) => {
+                if (isProcessing) return; // Prevent double clicks
+                
+                setIsProcessing(true);
+                SpeechService.stop(); // Stop any ongoing speech
+                
+                // Update results immediately
+                setResults(prev => ({
+                    ...prev,
+                    [isCorrect ? 'correct' : 'incorrect']: prev[isCorrect ? 'correct' : 'incorrect'] + 1
+                }));
+                
+                // Short delay for visual feedback, then advance
+                setTimeout(() => {
+                    if (currentIndex < cards.length - 1) {
+                        setCurrentIndex(prev => prev + 1);
+                        setIsFlipped(false);
+                        setIsProcessing(false);
+                    } else {
+                        setShowCompletePrompt(true);
+                        setIsProcessing(false);
+                    }
+                }, 300); // Reduced from 800ms to 300ms
+            };
+            
+            const handleComplete = () => {
+                const duration = Math.floor((Date.now() - startTime) / 1000);
+                onComplete({ ...results, duration });
+            };
+            
+            if (!currentCard) {
+                return (
+                    <div className="flex items-center justify-center h-96">
+                        <div className="text-center">
+                            <Icon name="study" className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                            <p className="text-lg">No cards to study</p>
+                        </div>
+                    </div>
+                );
+            }
+            
+            return (
+                <div className="space-y-4 pb-6">
+                    <div className="p-4 rounded-xl">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm font-medium">
+                                Question {currentIndex + 1} of {cards.length}
+                            </span>
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-1">
+                                    <Icon name="points" className="w-4 h-4 text-blue-500" />
+                                    <span className="text-sm font-medium">{totalPoints}pt total</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Icon name="check" className="w-4 h-4 text-green-500" />
+                                    <span className="text-sm font-medium">{results.correct}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Icon name="x" className="w-4 h-4 text-red-500" />
+                                    <span className="text-sm font-medium">{results.incorrect}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className={`h-2 rounded-full overflow-hidden ${
+                            theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
+                        }`}>
+                            <div
+                                className="h-full bg-blue-500 transition-all duration-500"
+                                style={{ width: `${progress}%` }}
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="px-4">
+                        <MobileStudyCard
+                            card={currentCard}
+                            isFlipped={isFlipped}
+                            onFlip={() => !isProcessing && setIsFlipped(!isFlipped)}
+                        />
+                    </div>
+                    
+                    <div className="px-4">
+                        {isFlipped ? (
+                            <div className="space-y-3">
+                                <p className={`text-center text-sm ${
+                                    theme === 'dark' ? 'text-gray-300' : 'text-gray-600'
+                                }`}>
+                                    How well did you know this answer?
+                                </p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => handleResponse(false)}
+                                        disabled={isProcessing}
+                                        className={`py-4 bg-red-500 text-white rounded-xl hover:bg-red-600 font-medium transition-all active:scale-95 ${
+                                            isProcessing ? 'opacity-50 cursor-not-allowed' : ''
+                                        }`}
+                                    >
+                                        ❌ Didn't Know
+                                    </button>
+                                    <button
+                                        onClick={() => handleResponse(true)}
+                                        disabled={isProcessing}
+                                        className={`py-4 bg-green-500 text-white rounded-xl hover:bg-green-600 font-medium transition-all active:scale-95 ${
+                                            isProcessing ? 'opacity-50 cursor-not-allowed' : ''
+                                        }`}
+                                    >
+                                        ✅ I Knew It
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => setIsFlipped(true)}
+                                disabled={isProcessing}
+                                className={`w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 text-lg font-medium transition-all active:scale-95 ${
+                                    isProcessing ? 'opacity-50 cursor-not-allowed' : ''
+                                }`}
+                            >
+                                Show Answer
+                            </button>
+                        )}
+                    </div>
+                    
+                    {showCompletePrompt && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                            <div className={`w-full max-w-sm rounded-2xl p-6 ${
+                                theme === 'dark' ? 'bg-gray-900' : 'bg-white'
+                            }`}>
+                                <h3 className="text-xl font-semibold mb-4 text-center">Session Complete! 🎉</h3>
+                                <div className="space-y-3 mb-6">
+                                    <div className="flex justify-between">
+                                        <span>Cards studied:</span>
+                                        <span className="font-medium">{results.correct + results.incorrect}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>Total points:</span>
+                                        <span className="font-medium">{totalPoints}pt</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>I knew it:</span>
+                                        <span className="font-medium text-green-500">{results.correct}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>Didn't know:</span>
+                                        <span className="font-medium text-red-500">{results.incorrect}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>Knowledge rate:</span>
+                                        <span className="font-medium">
+                                            {results.correct + results.incorrect > 0
+                                                ? Math.round((results.correct / (results.correct + results.incorrect)) * 100)
+                                                : 0}%
+                                        </span>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={handleComplete}
+                                    className="w-full py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
+                                >
+                                    Finish Session
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
@@ -1931,10 +1335,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         autoReadAnswer: !prev.settings.speechEnabled,
                     }
                 }));
-                
-                if (state.settings.speechEnabled) {
-                    SpeechService.stop();
-                }
             };
             
             const value = {
@@ -1976,12 +1376,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 return points;
             }, [cards]);
             
-            useEffect(() => {
-                if (activeView !== 'study' || !isStudying) {
-                    SpeechService.stop();
-                }
-            }, [activeView, isStudying]);
-            
             const handleImport = () => {
                 fileInputRef.current?.click();
                 setShowMenu(false);
@@ -1992,7 +1386,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                     `Are you sure you want to delete ALL ${cards.length} cards?\n\nThis action cannot be undone and will also clear all your study progress.`
                 );
                 if (confirmed) {
-                    SpeechService.stop();
                     clearAllCards();
                     setShowMenu(false);
                     alert('All cards have been cleared. You now have a clean slate!');
@@ -2046,7 +1439,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             };
             
             const startStudyingCard = (card) => {
-                SpeechService.stop();
                 setStudyCards([card]);
                 setIsStudying(true);
                 setActiveView('study');
@@ -2063,12 +1455,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 return cards.reduce((sum, card) => sum + (card.points || 1), 0);
             }, [cards]);
             
-            const handleViewChange = (newView) => {
-                SpeechService.stop();
-                setActiveView(newView);
-                setIsStudying(false);
-            };
-            
             return (
                 <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
                     <header className={`sticky top-0 z-40 ${
@@ -2076,9 +1462,14 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                     } border-b backdrop-blur-md bg-opacity-90`}>
                         <div className="px-4 py-3">
                             <div className="flex justify-between items-center">
-                                <h1 className="text-xl font-bold">
+                                <h1 className="text-xl font-bold flex items-center gap-2">
                                     <span className="bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
                                         Flash Cards Pro 🎯
+                                    </span>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                        theme === 'dark' ? 'bg-gray-700 text-gray-400' : 'bg-gray-200 text-gray-600'
+                                    }`}>
+                                        v2.1
                                     </span>
                                 </h1>
                                 
@@ -2318,21 +1709,16 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                     <p className={`text-sm mb-4 ${
                                         theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
                                     }`}>
-                                        Choose how you want to study your {cards.length} flashcards
+                                        Test your knowledge with these flashcards
                                     </p>
                                     
                                     <div className="space-y-3">
                                         <button
                                             onClick={() => setShowPointsSelection(true)}
                                             disabled={filteredCards.length === 0}
-                                            className="w-full py-4 bg-purple-500 text-white rounded-xl hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium relative overflow-hidden group"
+                                            className="w-full py-4 bg-purple-500 text-white rounded-xl hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
                                         >
-                                            <div className="absolute inset-0 bg-white opacity-10 transform translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
-                                            <div className="relative flex items-center justify-center gap-2">
-                                                <Icon name="points" className="w-5 h-5" />
-                                                Study by Points
-                                            </div>
-                                            <div className="text-xs opacity-75 mt-1">Focus on specific difficulty levels (1pt, 2pt, 3pt, etc.)</div>
+                                            Study by Points 🏆
                                         </button>
                                         
                                         <button
@@ -2346,27 +1732,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                             Study All ({filteredCards.length} cards)
                                         </button>
                                     </div>
-                                </div>
-                                
-                                {/* Quick Stats */}
-                                <div className={`grid grid-cols-3 gap-3 ${
-                                    theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                                }`}>
-                                    {[1, 2, 3, 4, 5, 6].map(pt => {
-                                        const count = cards.filter(c => (c.points || 1) === pt).length;
-                                        if (count === 0) return null;
-                                        return (
-                                            <div key={pt} className={`p-3 rounded-lg text-center ${
-                                                theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
-                                            }`}>
-                                                <div className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1 mb-1 ${getPointsColor(pt)}`}>
-                                                    <Icon name="points" className="w-3 h-3" />
-                                                    {pt}pt
-                                                </div>
-                                                <div className="text-sm font-medium">{count} cards</div>
-                                            </div>
-                                        );
-                                    }).filter(Boolean)}
                                 </div>
                             </div>
                         )}
@@ -2386,9 +1751,8 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                     <div className={`p-4 rounded-xl ${
                                         theme === 'dark' ? 'bg-gray-800' : 'bg-white'
                                     } text-center`}>
-                                        <div className="text-3xl font-bold text-blue-500">{cards.length}</div>
+                                        <div className="text-2xl font-bold text-blue-500">{cards.length}</div>
                                         <div className="text-sm text-gray-500">Total Cards</div>
-                                        <div className="text-xs text-gray-400 mt-1">All 78 questions loaded!</div>
                                     </div>
                                     
                                     <div className={`p-4 rounded-xl ${
@@ -2425,7 +1789,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                     theme === 'dark' ? 'bg-gray-800' : 'bg-white'
                                 }`}>
                                     <h3 className="font-semibold mb-3">Points Distribution</h3>
-                                    <p className="text-xs text-gray-500 mb-3">Study specific point values to focus your learning!</p>
                                     <div className="space-y-2">
                                         {availablePoints.map(pt => {
                                             const count = cards.filter(c => (c.points || 1) === pt).length;
@@ -2498,7 +1861,10 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                     } border-t`}>
                         <div className="flex justify-around py-2">
                             <button
-                                onClick={() => handleViewChange('cards')}
+                                onClick={() => { 
+                                    setActiveView('cards'); 
+                                    setIsStudying(false); 
+                                }}
                                 className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
                                     activeView === 'cards' && !isStudying 
                                         ? 'text-blue-500' 
@@ -2509,7 +1875,10 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                 <span className="text-xs">Cards</span>
                             </button>
                             <button
-                                onClick={() => handleViewChange('study')}
+                                onClick={() => { 
+                                    setActiveView('study'); 
+                                    setIsStudying(false); 
+                                }}
                                 className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
                                     activeView === 'study' || isStudying 
                                         ? 'text-blue-500' 
@@ -2520,7 +1889,10 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                 <span className="text-xs">Study</span>
                             </button>
                             <button
-                                onClick={() => handleViewChange('stats')}
+                                onClick={() => { 
+                                    setActiveView('stats'); 
+                                    setIsStudying(false); 
+                                }}
                                 className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
                                     activeView === 'stats' 
                                         ? 'text-blue-500' 
@@ -2547,6 +1919,17 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
 
         // Render the app
         ReactDOM.render(React.createElement(App), document.getElementById('root'));
+    </script>
+
+    <script>
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => console.log('SW registered: ', registration))
+                    .catch((registrationError) => console.log('SW registration failed: ', registrationError));
+            });
+        }
     </script>
 </body>
 </html>
