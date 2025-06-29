@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1f2937">
-    <title>Flash Cards Pro - Gesture Edition</title>
+    <title>Flash Cards Pro - Points System</title>
+    <link rel="manifest" href="manifest.json">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -37,47 +38,6 @@
             overflow: hidden; 
         }
         button:active { transform: scale(0.98); }
-        
-        /* Enhanced Animation Keyframes */
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px) translateX(-50%);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0) translateX(-50%);
-            }
-        }
-        
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 0.9;
-            }
-            50% {
-                opacity: 0.7;
-            }
-        }
-        
-        @keyframes bounce {
-            0%, 20%, 53%, 80%, 100% {
-                transform: translate3d(0,0,0);
-            }
-            40%, 43% {
-                transform: translate3d(0,-8px,0);
-            }
-            70% {
-                transform: translate3d(0,-4px,0);
-            }
-            90% {
-                transform: translate3d(0,-2px,0);
-            }
-        }
-        
-        .animate-bounce {
-            animation: bounce 1s infinite;
-        }
-        
         @media screen and (max-width: 768px) { 
             input, textarea, select { font-size: 16px !important; } 
         }
@@ -87,7 +47,7 @@
     <div id="root"></div>
     
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useCallback, createContext, useContext, useRef } = React;
+        const { useState, useEffect, useMemo, useCallback, createContext, useContext } = React;
 
         // Simple Icons
         const Icon = ({ name, className = "w-5 h-5" }) => {
@@ -95,7 +55,7 @@
                 search: "🔍", plus: "➕", moon: "🌙", sun: "☀️", menu: "☰",
                 cards: "🎴", study: "📚", stats: "📊", edit: "✏️", delete: "🗑️",
                 check: "✅", x: "❌", clock: "⏰", volume: "🔊", brain: "🧠",
-                zap: "⚡", target: "🎯", trend: "📈"
+                zap: "⚡", target: "🎯", trend: "📈", points: "🏆"
             };
             
             return React.createElement('span', {
@@ -104,16 +64,13 @@
             }, icons[name] || "📝");
         };
 
-        // Enhanced Text-to-Speech Service
+        // Text-to-Speech Service
         class SpeechService {
-            static currentUtterance = null;
-            static isPlaying = false;
-            
             static speak(text, settings = {}) {
                 if (!('speechSynthesis' in window) || !settings.speechEnabled) return;
                 
-                // Always cancel any ongoing speech first
-                this.stop();
+                // Cancel any ongoing speech
+                window.speechSynthesis.cancel();
                 
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.rate = settings.speechRate || 1.0;
@@ -128,33 +85,12 @@
                     }
                 }
                 
-                // Track the current utterance and state
-                this.currentUtterance = utterance;
-                this.isPlaying = true;
-                
-                // Handle speech events
-                utterance.onend = () => {
-                    this.currentUtterance = null;
-                    this.isPlaying = false;
-                };
-                
-                utterance.onerror = () => {
-                    this.currentUtterance = null;
-                    this.isPlaying = false;
-                };
-                
-                utterance.onstart = () => {
-                    this.isPlaying = true;
-                };
-                
                 window.speechSynthesis.speak(utterance);
             }
             
             static stop() {
                 if ('speechSynthesis' in window) {
                     window.speechSynthesis.cancel();
-                    this.currentUtterance = null;
-                    this.isPlaying = false;
                 }
             }
         }
@@ -169,7 +105,7 @@
 
         // Storage Service
         class StorageService {
-            static STORAGE_KEY = 'flashcards-pro-gestures';
+            static STORAGE_KEY = 'flashcards-pro-enhanced';
             
             static save(state) {
                 try {
@@ -194,7 +130,7 @@
             
             static exportData(state) {
                 const data = {
-                    version: '4.0-gestures',
+                    version: '3.0',
                     exported: new Date().toISOString(),
                     ...state,
                     categories: Array.from(state.categories),
@@ -204,7 +140,7 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `flashcards-gestures-${new Date().toISOString().split('T')[0]}.json`;
+                a.download = `flashcards-pro-${new Date().toISOString().split('T')[0]}.json`;
                 a.click();
                 URL.revokeObjectURL(url);
             }
@@ -250,11 +186,14 @@
                 let currentAnswer = '';
                 let isAnswer = false;
                 let questionNumber = 1;
+                let currentPoints = 1;
                 
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i].trim();
                     
+                    // Check if this is a question line (starts with Q followed by number)
                     if (line.match(/^Q\d+\)/)) {
+                        // Save previous card if exists
                         if (currentQuestion && currentAnswer) {
                             cards.push({
                                 id: questionNumber.toString(),
@@ -262,7 +201,7 @@
                                 answer: currentAnswer.trim(),
                                 category: 'Theory Questions',
                                 tags: [],
-                                difficulty: 'medium',
+                                points: currentPoints,
                                 media: [],
                                 created: new Date().toISOString(),
                                 lastStudied: null,
@@ -277,7 +216,12 @@
                             questionNumber++;
                         }
                         
-                        currentQuestion = line;
+                        // Extract points from the question
+                        const pointsMatch = line.match(/\((\d+)pt\)/);
+                        currentPoints = pointsMatch ? parseInt(pointsMatch[1]) : 1;
+                        
+                        // Remove the points notation from the question
+                        currentQuestion = line.replace(/\(\d+pt\)/, '').trim();
                         currentAnswer = '';
                         isAnswer = false;
                     } else if (line.startsWith('Answer:')) {
@@ -285,6 +229,7 @@
                         currentAnswer = line.replace('Answer:', '').trim();
                     } else if (line.length > 0) {
                         if (!isAnswer && currentQuestion && !line.match(/^Q\d+\)/)) {
+                            // This might be the start of an answer without "Answer:" prefix
                             isAnswer = true;
                             currentAnswer = line;
                         } else if (isAnswer) {
@@ -295,6 +240,7 @@
                     }
                 }
                 
+                // Don't forget the last card
                 if (currentQuestion && currentAnswer) {
                     cards.push({
                         id: questionNumber.toString(),
@@ -302,7 +248,7 @@
                         answer: currentAnswer.trim(),
                         category: 'Theory Questions',
                         tags: [],
-                        difficulty: 'medium',
+                        points: currentPoints,
                         media: [],
                         created: new Date().toISOString(),
                         lastStudied: null,
@@ -320,605 +266,371 @@
             }
         }
 
-        // Card Data - All 73 Questions
-        const createDefaultCards = () => [
-            {
-                id: '1',
-                question: 'Q1) Explain why MUST there be a safe system of work.',
-                answer: 'It is a LEGAL requirement under the HASWA 1974.',
-                category: 'Theory Questions',
-                tags: ['safety', 'legal', 'HASWA'],
-                difficulty: 'medium'
-            },
-            {
-                id: '2',
-                question: 'Q2) a) State the legislation and the regulation therein that refers to the stability of cranes and b) Which regulation states the requirement for all lifting operations to be properly planned?',
-                answer: 'a) LOLER Regulation 4\nb) LOLER Regulation 8',
-                category: 'Theory Questions',
-                tags: ['LOLER', 'legislation', 'planning'],
-                difficulty: 'medium'
-            },
-            {
-                id: '3',
-                question: 'Q3) a) State the regulation number for the lifting of persons under LOLER 1998 and b) List FIVE requirements to be within a procedure.',
-                answer: 'a) LOLER Regulation 5\nb) 1. Has suitable devices to prevent the risk of carrier falling\n2. A person trapped in any carrier can be freed\n3. The carrier has an enhanced safety coefficient suspension rope or chain\n4. The rope or chain is inspected by a competent person every working day\n5. The use of carrier clearly marked for personnel use',
-                category: 'Theory Questions',
-                tags: ['LOLER', 'personnel', 'safety'],
-                difficulty: 'hard'
-            },
-            {
-                id: '4',
-                question: 'Q4) a) What is the Factor of Safety when lifting personnel and b) What needs to be taken into account with wind speeds?',
-                answer: 'a) 2:1\nb) maximum wind speeds of 7m/s',
-                category: 'Theory Questions',
-                tags: ['safety', 'personnel', 'wind'],
-                difficulty: 'medium'
-            },
-            {
-                id: '5',
-                question: 'Q5) How does the guidance in LOLER 1998 (L 113) describe the difference between installed and positioned?',
-                answer: 'Installed – fixed in location (tower crane)\nPositioned – manoeuvred in to place (mobile crane)',
-                category: 'Theory Questions',
-                tags: ['LOLER', 'definitions', 'crane types'],
-                difficulty: 'easy'
-            },
-            {
-                id: '6',
-                question: 'Q6) a) What is the minimum recommended distance that is allowed between the counterweight(s) of any lifting equipment and an object/structure and b) What measure must be taken if the distance is less?',
-                answer: 'a) Minimum 600 mm.\nb) Prevent access',
-                category: 'Theory Questions',
-                tags: ['counterweight', 'distance', 'safety'],
-                difficulty: 'medium'
-            },
-            {
-                id: '7',
-                question: 'Q7) Who has overall control of the lifting operation?',
-                answer: 'The Appointed Person',
-                category: 'Theory Questions',
-                tags: ['appointed person', 'control', 'responsibility'],
-                difficulty: 'easy'
-            },
-            {
-                id: '8',
-                question: 'Q8) What IS the definition of a competent person as stated by Codes of Practice?',
-                answer: 'A person who has practical and theoretical knowledge as well as planning experience of crane and equipment.',
-                category: 'Theory Questions',
-                tags: ['competent person', 'definitions', 'qualifications'],
-                difficulty: 'medium'
-            },
-            {
-                id: '9',
-                question: 'Q9) Which part of BS 7121 is specific to mobile cranes?',
-                answer: 'Sections 2-3',
-                category: 'Theory Questions',
-                tags: ['BS 7121', 'mobile cranes', 'standards'],
-                difficulty: 'easy'
-            },
-            {
-                id: '10',
-                question: 'Q10) When a crane company hires out a crane, name TWO main legal requirements the hire company must meet regarding the crane and operator.',
-                answer: '1. A competent trained operator\n2. Correct and up-to-date certification',
-                category: 'Theory Questions',
-                tags: ['hire', 'legal requirements', 'operator'],
-                difficulty: 'medium'
-            },
-            {
-                id: '11',
-                question: 'Q11) Explain the difference between an employing and user organisation.',
-                answer: 'Employing Organisation requires the load to be lifted\nUser Organisation and plan and manoeuvres the lift for the client.',
-                category: 'Theory Questions',
-                tags: ['organisations', 'responsibilities', 'definitions'],
-                difficulty: 'medium'
-            },
-            {
-                id: '12',
-                question: 'Q12) Who is responsible for providing the contractor with written details of the work to be done?',
-                answer: 'The Employing Organisation',
-                category: 'Theory Questions',
-                tags: ['employing organisation', 'responsibilities', 'contractor'],
-                difficulty: 'easy'
-            },
-            {
-                id: '13',
-                question: 'Q13) Where would the information relating to the additional requirements of an intermediate lift over a basic lift be sought?',
-                answer: 'Explained in BS 7121, 4.3.2 for basic lift, 4.3.3. for intermediate/standard lift',
-                category: 'Theory Questions',
-                tags: ['BS 7121', 'lift types', 'standards'],
-                difficulty: 'medium'
-            },
-            {
-                id: '14',
-                question: 'Q14) To whom should the appointed person give all details involving the lifting operation?',
-                answer: 'Crane supervisor and anyone involved.',
-                category: 'Theory Questions',
-                tags: ['appointed person', 'communication', 'responsibilities'],
-                difficulty: 'easy'
-            },
-            {
-                id: '15',
-                question: 'Q15) Why is it recommended to complete a report after the completion of the lifting operation?',
-                answer: 'To evaluate the lifting operation where good practice can be utilized in future lifts or where the operation could have been planned more effectively. The client/contractor may further require written feedback on the operation.',
-                category: 'Theory Questions',
-                tags: ['reporting', 'evaluation', 'best practices'],
-                difficulty: 'medium'
-            },
-            {
-                id: '16',
-                question: 'Q16) A change of crane lifting equipment operator is required. What must they be made aware of before continuing?',
-                answer: 'The lift plan and any other relevant issue.',
-                category: 'Theory Questions',
-                tags: ['operator change', 'lift plan', 'handover'],
-                difficulty: 'easy'
-            },
-            {
-                id: '17',
-                question: 'Q17) Name TWO duties of the crane operator.',
-                answer: '1. Operate crane according to manufactures instructions\n2. Implement the lift plan and safe system of work',
-                category: 'Theory Questions',
-                tags: ['operator duties', 'responsibilities', 'safety'],
-                difficulty: 'easy'
-            },
-            {
-                id: '18',
-                question: 'Q18) Describe FOUR factors that need to be taken into account when specifying communication procedures for a lifting operation.',
-                answer: '1. Communication method established before the lift\n2. Banksman/Signaller shall be visible/audible at all times\n3. The operator shall obey stop signals whoever gives them\n4. The Person in Charge shall be clearly identified and made known to all members of the lift team and personnel in the proximity.',
-                category: 'Theory Questions',
-                tags: ['communication', 'procedures', 'safety'],
-                difficulty: 'medium'
-            },
-            {
-                id: '19',
-                question: 'Q19) If radios are to be used during the lifting operations, what FIVE actions and checks must be made before use?',
-                answer: '1. Check if people involved know how to use them\n2. Check if batteries will last for the duration of the operation or spare batteries are supplied\n3. Check if all involved in the lifting are on the same frequency (channel)\n4. Check if the signal strength is sufficient\n5. Check if the frequency is clear from other interferences',
-                category: 'Theory Questions',
-                tags: ['radios', 'communication', 'checks'],
-                difficulty: 'hard'
-            },
-            {
-                id: '20',
-                question: 'Q20) Name the FOUR stages of the hierarchy of control for the marshalling of mobile lifting equipment.',
-                answer: '1. Elimination/substitution\n2. Engineering\n3. Administration\n4. PPE',
-                category: 'Theory Questions',
-                tags: ['hierarchy of control', 'marshalling', 'safety'],
-                difficulty: 'medium'
-            },
-            {
-                id: '21',
-                question: 'Q21) Name THREE factors to be taken into account when devising a mobile lifting equipment marshalling plan.',
-                answer: '1. Visibility\n2. Attaching / Detaching and securing loads\n3. Environment',
-                category: 'Theory Questions',
-                tags: ['marshalling plan', 'factors', 'planning'],
-                difficulty: 'medium'
-            },
-            {
-                id: '22',
-                question: 'Q22) Name THREE possible effects that fatigue can have on a lifting team',
-                answer: '1. Decreased productivity\n2. Reduced safe working ability\n3. Absenteeism',
-                category: 'Theory Questions',
-                tags: ['fatigue', 'effects', 'safety'],
-                difficulty: 'easy'
-            },
-            {
-                id: '23',
-                question: 'Q23) Name SIX principle factors should be taken into account in relation to fatigue management of a lifting operation.',
-                answer: '1. Comply with your organization\'s policies and procedures relating fatigue\n2. Understand your sleep, rest and recovery needs and obtain adequate rest and sleep away from work\n3. Seek medical advice and assistance if you have a concern about a health condition that affects your sleep or causes fatigue\n4. Look out for signs of fatigue at the people you work with\n5. In consultations with your supervisor, take steps to manage fatigue\n6. Maintain hydration',
-                category: 'Theory Questions',
-                tags: ['fatigue management', 'safety', 'health'],
-                difficulty: 'hard'
-            },
-            {
-                id: '24',
-                question: 'Q24) State THREE occasions on which lifting equipment must be thoroughly examined.',
-                answer: '1. When lifting equipment is first supplied (used for the first time by the employer)\n2. When certain equipment is installed (e.g. tower crane)\n3. Periodically during the lifetime of the equipment\n4. Following exceptional circumstances',
-                category: 'Theory Questions',
-                tags: ['thorough examination', 'inspection', 'requirements'],
-                difficulty: 'medium'
-            },
-            {
-                id: '25',
-                question: 'Q25) How long is a thorough examination for a lifting accessory valid for?',
-                answer: '6 months.',
-                category: 'Theory Questions',
-                tags: ['thorough examination', 'validity', 'accessories'],
-                difficulty: 'easy'
-            },
-            {
-                id: '26',
-                question: 'Q26) Name FOUR items that must be recorded when a thorough examination on a lifting appliance has been carried out.',
-                answer: '1. Defects\n2. SWL\n3. Model of the machine\n4. Examination location',
-                category: 'Theory Questions',
-                tags: ['recording', 'thorough examination', 'documentation'],
-                difficulty: 'medium'
-            },
-            {
-                id: '27',
-                question: 'Q27) List TWO methods of obtaining the accurate weight of a load.',
-                answer: '1. Manufacturer\'s data\n2. Trial lift (using a weight load cell)',
-                category: 'Theory Questions',
-                tags: ['load weight', 'measurement', 'methods'],
-                difficulty: 'easy'
-            },
-            {
-                id: '28',
-                question: 'Q28) During dismantling operations, what factor of safety is applied to the load?',
-                answer: 'Minimum of 20%',
-                category: 'Theory Questions',
-                tags: ['dismantling', 'factor of safety', 'operations'],
-                difficulty: 'medium'
-            },
-            {
-                id: '29',
-                question: 'Q29) If an object has to be dismantled above ground to be lifted to ground level (and can\'t be returned to the original position), what factor of safety should be applied?',
-                answer: '2:1',
-                category: 'Theory Questions',
-                tags: ['dismantling', 'factor of safety', 'ground level'],
-                difficulty: 'medium'
-            },
-            {
-                id: '30',
-                question: 'Q30) Name THREE factors(configurations) that determine the rated lifting capacity of lifting equipment.',
-                answer: '1. Boom angle\n2. Spread of outriggers\n3. The radius',
-                category: 'Theory Questions',
-                tags: ['lifting capacity', 'configurations', 'factors'],
-                difficulty: 'medium'
-            },
-            {
-                id: '31',
-                question: 'Q31) What does the term \'structural strength\' relate to with regard to the lifting capacity of any lifting equipment?',
-                answer: 'Structural strength refers to where the maximum SWL is limited by the structural strength of all relevant components. Example boom, outriggers, slew ring, chassis .',
-                category: 'Theory Questions',
-                tags: ['structural strength', 'lifting capacity', 'components'],
-                difficulty: 'medium'
-            },
-            {
-                id: '32',
-                question: 'Q32) Name the sections in 7121 where advice is given on \'Lifting without outriggers\' and \'Pick and carry\'.',
-                answer: '12.1.5 Lifting without outriggers\n12.1.6 Pick and Carry',
-                category: 'Theory Questions',
-                tags: ['BS 7121', 'outriggers', 'pick and carry'],
-                difficulty: 'medium'
-            },
-            {
-                id: '33',
-                question: 'Q33) Define the term \'radius\'.',
-                answer: 'The radius is the horizontal distance between the points at which the centre of rotation meets the ground and the vertical centre line passing through the load lifting attachment.',
-                category: 'Theory Questions',
-                tags: ['radius', 'definitions', 'measurements'],
-                difficulty: 'medium'
-            },
-            {
-                id: '34',
-                question: 'Q34) If a crane is out of level, what effect will it have on the radius?',
-                answer: 'Increase on low side, decrease on high side.',
-                category: 'Theory Questions',
-                tags: ['crane level', 'radius', 'effects'],
-                difficulty: 'medium'
-            },
-            {
-                id: '35',
-                question: 'Q35) What is the definition of the term "outreach"?',
-                answer: 'The horizontal measurement from the centre of the hook block to the nearest part of the crane (excluding boom).',
-                category: 'Theory Questions',
-                tags: ['outreach', 'definitions', 'measurements'],
-                difficulty: 'medium'
-            },
-            {
-                id: '36',
-                question: 'Q36) If a load of 20 tonnes is lifted on four falls of rope, what is the tension in each fall?',
-                answer: '20 tonnes / 4 falls = 5 tonnes each fall',
-                category: 'Theory Questions',
-                tags: ['rope falls', 'tension', 'calculations'],
-                difficulty: 'easy'
-            },
-            {
-                id: '37',
-                question: 'Q37) What advantage is gained by increasing the number of falls on a hook block?',
-                answer: 'Increasing the falls could increase lifting capacity (for a particular configuration).',
-                category: 'Theory Questions',
-                tags: ['hook block', 'falls', 'capacity'],
-                difficulty: 'easy'
-            },
-            {
-                id: '38',
-                question: 'Q38) State the safe procedure to be followed before lifting or lowering a load down a shaft or excavation.',
-                answer: 'The empty hook must be lowered down to working level and the hoist drum checked for sufficient turns on the drum.',
-                category: 'Theory Questions',
-                tags: ['shaft lifting', 'procedures', 'safety'],
-                difficulty: 'medium'
-            },
-            {
-                id: '39',
-                question: 'Q39) When planning a lifting operation to place loads below ground level, what needs to be taken into account when calculating the gross weight of the load?',
-                answer: 'The weight of the rope below ground level will need to be factored into the gross weight of the load.',
-                category: 'Theory Questions',
-                tags: ['below ground', 'weight calculation', 'rope weight'],
-                difficulty: 'medium'
-            },
-            {
-                id: '40',
-                question: 'Q40) Explain the purpose of the over-hoist limit switch?',
-                answer: 'To stop the hook from hitting the boom head.',
-                category: 'Theory Questions',
-                tags: ['over-hoist limit', 'safety devices', 'protection'],
-                difficulty: 'easy'
-            },
-            {
-                id: '41',
-                question: 'Q41) What are the types of warning indicated by RCI and at what point are they activated?',
-                answer: 'AMBER 90-97.6%\nRED light with external alarm 102.5-110%',
-                category: 'Theory Questions',
-                tags: ['RCI', 'warnings', 'percentages'],
-                difficulty: 'medium'
-            },
-            {
-                id: '42',
-                question: 'Q42) a) Where would the duty board of a tower crane normally be located and b) Name FOUR types of information that it must contain',
-                answer: 'a) Located at the base of the tower crane\nb)\n1. Make\n2. Model\n3. Serial number\n4. Capacity at maximum radius',
-                category: 'Theory Questions',
-                tags: ['duty board', 'tower crane', 'information'],
-                difficulty: 'medium'
-            },
-            {
-                id: '43',
-                question: 'Q43) How could the deflection of a boom or jib on a mobile-type crane affect a lift?',
-                answer: 'The boom deflection can cause an increase in the radius.',
-                category: 'Theory Questions',
-                tags: ['boom deflection', 'radius', 'effects'],
-                difficulty: 'medium'
-            },
-            {
-                id: '44',
-                question: 'Q44) Why must a lifting equipment operator never try to,\' and \'drag\' a load?',
-                answer: 'Because it can induce side loading on the boom (for which it wasn\'t designed) and can cause structural failure.',
-                category: 'Theory Questions',
-                tags: ['side loading', 'dragging', 'structural failure'],
-                difficulty: 'medium'
-            },
-            {
-                id: '45',
-                question: 'Q45) On mobile and crawler cranes, in what situation can a single load be lifted using the fly jib hook block & min book hook block simultaneously?',
-                answer: 'If it is stated by the manufacturer.',
-                category: 'Theory Questions',
-                tags: ['dual hook', 'manufacturer', 'specifications'],
-                difficulty: 'medium'
-            },
-            {
-                id: '46',
-                question: 'Q46) On both tracked and wheeled 360 degree excavators: a) What differs between lifting over the side of the machine compared to lifting the front or the rear of the machine? b) Explain why.',
-                answer: 'a) Increased stability when lifting over the front and back, over the side a reduction of capacity\nb) Reduced stability base',
-                category: 'Theory Questions',
-                tags: ['excavators', 'stability', 'lifting positions'],
-                difficulty: 'medium'
-            },
-            {
-                id: '47',
-                question: 'Q47) Name FOUR factors relating to ground that a ground engineer would need to taken into account when determining the load bearing capacity of ground',
-                answer: '1. Ability of the ground to support the gross weight of the machine and load\n2. Integrity of adjacent ground to withstand lateral stresses imposed\n3. Levelling and preparation\n4. Underground services',
-                category: 'Theory Questions',
-                tags: ['ground conditions', 'load bearing', 'ground engineer'],
-                difficulty: 'hard'
-            },
-            {
-                id: '48',
-                question: 'Q48) The area of mat size has been correctly specified for use with the outriggers of a mobile crane and the intended load and operating radius but the pad not stiff or rigid enough (e.g. it is too thin). Explain the possible consequence.',
-                answer: 'The mat will be unable to spread the outrigger point load uniformly and will risk sinking in and destabilizing the crane.',
-                category: 'Theory Questions',
-                tags: ['mats', 'outriggers', 'stability'],
-                difficulty: 'medium'
-            },
-            {
-                id: '49',
-                question: 'Q49) Identify FOUR requirements for ensuring the stability of mobile cranes on site.',
-                answer: '1. Firm/level standing\n2. All outriggers extended accordingly\n3. Crane level both longitudinally and transversely\n4. All wheels clear of the ground\n5. Crane not overloaded',
-                category: 'Theory Questions',
-                tags: ['stability', 'mobile cranes', 'requirements'],
-                difficulty: 'medium'
-            },
-            {
-                id: '50',
-                question: 'Q50) Outline the role of the Temporary Works Coordinator.',
-                answer: '1. Co-ordinate all temporary works activities\n2. Ensure a temporary works register is established and maintained\n3. Ensure that responsibilities are accepted\n4. Ensure that a design brief is prepared with the actual situation on site',
-                category: 'Theory Questions',
-                tags: ['temporary works', 'coordinator', 'responsibilities'],
-                difficulty: 'medium'
-            },
-            {
-                id: '51',
-                question: 'Q51) Who is responsible for compiling all necessary documentation when lifting close proximity to a site boundary? E.g. protection fans?',
-                answer: 'Temp works coordinator',
-                category: 'Theory Questions',
-                tags: ['site boundary', 'documentation', 'temporary works'],
-                difficulty: 'easy'
-            },
-            {
-                id: '52',
-                question: 'Q52) A platform is being used to receive lifted loads of materials. What primary procedure must be in place to ensure that the platform being used is suitable and sufficient to hold the weight of the load?',
-                answer: 'Temporary works design.',
-                category: 'Theory Questions',
-                tags: ['platform', 'temporary works', 'design'],
-                difficulty: 'easy'
-            },
-            {
-                id: '53',
-                question: 'Q53) What are the THREE key fundamental aspects that need considering when preparing a design for any temporary works design/structure?',
-                answer: '1. foundation\n2. structure\n3. stability',
-                category: 'Theory Questions',
-                tags: ['temporary works', 'design', 'fundamentals'],
-                difficulty: 'medium'
-            },
-            {
-                id: '54',
-                question: 'Q54) List FOUR items of information that must be included on a temporary works register.',
-                answer: '1. Design Checker\n2. Date design complete\n3. Date design checked/approved\n4. Erection complete and checked or "Permit to Load", "Permit to Dismantle"',
-                category: 'Theory Questions',
-                tags: ['temporary works', 'register', 'documentation'],
-                difficulty: 'medium'
-            },
-            {
-                id: '55',
-                question: 'Q55) a) What is the recommended minimum exclusion zone around overhead power lines, b) Where can this information be sourced and c) Explain why a distance from overhead power lines should be kept.',
-                answer: 'a) 275KW-400KW 7M\n132KW 6M\n11KW-33KW 3M\nLow voltage 1M\nb) BS6 HSE\nc) Because electricity can arch across large gaps',
-                category: 'Theory Questions',
-                tags: ['power lines', 'exclusion zones', 'safety'],
-                difficulty: 'hard'
-            },
-            {
-                id: '56',
-                question: 'Q56) When planning a lift near a slope, what is the minimum distance to be kept between the supporting components of the lifting equipment and the slope?',
-                answer: 'Edge of the mat to the edge of the slope should be double of height of slope.',
-                category: 'Theory Questions',
-                tags: ['slopes', 'distance', 'safety'],
-                difficulty: 'medium'
-            },
-            {
-                id: '57',
-                question: 'Q57) If planning to lift loads In or near a pedestrianized area, what main factor needs to be taken into account?',
-                answer: 'Physical segregation of pedestrians from overhead loads. Create an exclusion zone.',
-                category: 'Theory Questions',
-                tags: ['pedestrians', 'exclusion zone', 'safety'],
-                difficulty: 'easy'
-            },
-            {
-                id: '58',
-                question: 'Q58) Two cranes are working in the same vicinity that encroach the operating radius of each. What actions should the lift plan or method statement normally specify?',
-                answer: 'Have crane coordinator in place or anti-collision and crash radios.',
-                category: 'Theory Questions',
-                tags: ['multiple cranes', 'coordination', 'collision avoidance'],
-                difficulty: 'medium'
-            },
-            {
-                id: '59',
-                question: 'Q59) In what circumstances would aviation warning lighting be required to high -type lifting equipment?',
-                answer: 'If the lifting equipment is within 6km of an aerodrome and the overall height exceeds 10 metres above nearby existing structures and trees.',
-                category: 'Theory Questions',
-                tags: ['aviation', 'lighting', 'height requirements'],
-                difficulty: 'medium'
-            },
-            {
-                id: '60',
-                question: 'Q60) Identify 4 types of infrastructure where a responsible body or owner would have to be notified when planning a lift on or near by.',
-                answer: '1. Rivers\n2. Airfields\n3. Highways\n4. Railways\n5. Live plant',
-                category: 'Theory Questions',
-                tags: ['infrastructure', 'notifications', 'planning'],
-                difficulty: 'medium'
-            },
-            {
-                id: '61',
-                question: 'Q61) Name a design of accessory hook that is exempt from being fitted with a safety catch.',
-                answer: 'A \'C\' type Hook.',
-                category: 'Theory Questions',
-                tags: ['hooks', 'safety catch', 'exemptions'],
-                difficulty: 'easy'
-            },
-            {
-                id: '62',
-                question: 'Q62) Name THREE markings found on multiple-leg slings.',
-                answer: '1. SWL (WLL)\n2. Manufactures name\n3. Serial number',
-                category: 'Theory Questions',
-                tags: ['slings', 'markings', 'identification'],
-                difficulty: 'easy'
-            },
-            {
-                id: '63',
-                question: 'Q63) State the maximum recommended included angle for single-leg slings when used as a pair.',
-                answer: 'Maximum 90 degrees.',
-                category: 'Theory Questions',
-                tags: ['slings', 'angles', 'recommendations'],
-                difficulty: 'easy'
-            },
-            {
-                id: '64',
-                question: 'Q64) Give TWO methods of obtaining the centre of gravity on an unbalanced load.',
-                answer: '1. Calculation\n2. Trial lift',
-                category: 'Theory Questions',
-                tags: ['centre of gravity', 'unbalanced loads', 'methods'],
-                difficulty: 'medium'
-            },
-            {
-                id: '65',
-                question: 'Q65) In which applications are single leg slings rated with their own SWL (WLL)?',
-                answer: 'Only when used vertically.',
-                category: 'Theory Questions',
-                tags: ['single leg slings', 'SWL', 'vertical use'],
-                difficulty: 'easy'
-            },
-            {
-                id: '66',
-                question: 'Q66) How is the SWL/WLL/rated capacity for multi-legs slings determined?',
-                answer: 'By the Uniform Load method.',
-                category: 'Theory Questions',
-                tags: ['multi-leg slings', 'capacity', 'uniform load'],
-                difficulty: 'medium'
-            },
-            {
-                id: '67',
-                question: 'Q67) To lift a load of 20 tonnes on a 4 single leg chain sling, what is the required SWL (WLL) for each leg with an included angle of 87 degrees? Please explain your calculation.',
-                answer: '1. 9.52 tonnes/each leg\n2. When using 4 leg chain sling the same calculation as 3 leg chain sling is used because it is considered that not all 4 legs are taking the weight equal. So: 20 tonnes divided by 2.1 (mod factor for 3 legs and 87 degrees angle) = 9.52 tonne each leg. 4x10 slings needed.',
-                category: 'Theory Questions',
-                tags: ['chain slings', 'calculations', 'SWL'],
-                difficulty: 'hard'
-            },
-            {
-                id: '68',
-                question: 'Q68) How should multiple accessories be connected to a crane hook?',
-                answer: 'Using a master ring and bow shackles.',
-                category: 'Theory Questions',
-                tags: ['accessories', 'connections', 'master ring'],
-                difficulty: 'easy'
-            },
-            {
-                id: '69',
-                question: 'Q69) State SIX environmental factors that can affect an external lifting operation.',
-                answer: '1. wind\n2. Fog\n3. Mist\n4. Excessive rain\n5. Lightning\n6. Storms\n7. Ice and snow',
-                category: 'Theory Questions',
-                tags: ['environmental factors', 'weather', 'external operations'],
-                difficulty: 'medium'
-            },
-            {
-                id: '70',
-                question: 'Q70) Name FOUR factors should be taken into account when calculating the effects of wind on a crane-based lifting operation',
-                answer: '1. The geometry and shape of the load\n2. The height to which the load is to be lifted\n3. The wind direction\n4. Operating between structures',
-                category: 'Theory Questions',
-                tags: ['wind effects', 'calculations', 'factors'],
-                difficulty: 'medium'
-            },
-            {
-                id: '71',
-                question: 'Q71) Give THREE examples of how excessive rain can affect an external lifting operation when using lifting equipment.',
-                answer: '1. Excessive rain can cause the ground to soften reducing the crane support\n2. Poor visibility\n3. Cause slippery conditions and reduce traction',
-                category: 'Theory Questions',
-                tags: ['rain effects', 'external operations', 'safety'],
-                difficulty: 'medium'
-            },
-            {
-                id: '72',
-                question: 'Q72) Outline THREE principle requirements for out of service procedures for tower cranes.',
-                answer: '1. Remove accessories and jib in free slew\n2. Out of radius of other cranes and obstructions\n3. Lock up and isolate crane',
-                category: 'Theory Questions',
-                tags: ['tower cranes', 'out of service', 'procedures'],
-                difficulty: 'medium'
-            },
-            {
-                id: '73',
-                question: 'Q73) Using the given lifting capacity diagram for the JC8 525/125 telescopic handler using a hook (A61): a) What is the maximum lifting capacity? b) What is the maximum lifting capacity when free on wheels (FOW) c) What the maximum hook height where a load can be lifted d) What is the maximum lifting capacity when the hook is at a height of 8m and the boom at an angle of 4Sdegrees?',
-                answer: 'a) 3500 kg\nb) 0kg\nc) 10m\nd) 1000kg',
-                category: 'Theory Questions',
-                tags: ['telescopic handler', 'capacity diagram', 'calculations'],
-                difficulty: 'hard'
-            }
-        ].map(card => ({
-            ...card,
-            media: [],
-            created: new Date().toISOString(),
-            lastStudied: null,
-            nextReview: null,
-            timesStudied: 0,
-            timesCorrect: 0,
-            easeFactor: 2.5,
-            interval: 0,
-            repetitions: 0,
-            lapses: 0
-        }));
+        // Parse points from question text
+        const parsePointsFromQuestion = (questionText) => {
+            const match = questionText.match(/\((\d+)pt\)/);
+            return match ? parseInt(match[1]) : 1;
+        };
+
+        // Remove points notation from question text
+        const cleanQuestionText = (questionText) => {
+            return questionText.replace(/\(\d+pt\)/, '').trim();
+        };
+
+        // Card Data - Parse from the new format with points
+        const createDefaultCards = () => {
+            const rawData = `
+Q1)Explain why MUST there be a safe system of work.(3pt)
+Answer: It is a LEGAL requirement under the HASWA 1974.
+
+Q2)a) State the legislation and the regulation therein that refers to the stability of cranes and b) Which regulation states the requirement for all lifting operations to be properly planned?(2pt)
+Answer: a) LOLER Regulation 4
+b) LOLER Regulation 8
+
+Q3) a) State the regulation number for the lifting of persons under LOLER 1998 and b) List FIVE requirements to be within a procedure.(6pt)
+Answer: a)LOLER Regulation 5
+b) 1. Has suitable devices to prevent the risk of carrier falling
+2. A person trapped in any carrier can be freed
+3. The carrier has an enhanced safety coefficient suspension rope or chain
+4. The rope or chain is inspected by a competent person every working day
+5. The use of carrier clearly marked for personnel use
+
+Q4)a) What is the 'Factor of Safety' when lifting personnel and
+b) What needs to be taken into account with wind speeds?(1pt)
+Answer: a) 2:1
+b) maximum wind speeds of 7m/s
+
+Q5)How does the guidance in LOLER 1998 (L 113) describe the difference between installed and positioned?(4pt)
+Answer: Installed – fixed in location (tower crane)
+Positioned – manoeuvred in to place (mobile crane)
+
+Q6)a) What is the minimum recommended distance that is allowed between the counterweight(s) of any lifting equipment and an object/structure and
+b) What measure must be taken if the distance is less?(4pt)
+Answer: a) Minimum 600 mm.
+b) Prevent access
+
+Q7)Who has overall control of the lifting operation?(1pt)
+Answer: The Appointed Person
+
+Q8)What IS the definition of a competent person as stated by Codes of Practice?(1pt)
+Answer: A person who has practical and theoretical knowledge as well as planning experience of crane and equipment.
+
+Q9)Which part of BS 7121 is specific to mobile cranes?(1pt)
+Answer: Sections 2-3
+
+Q10)When a crane company hires out a crane, name TWO main legal requirements the hire company must meet regarding the crane and operator.(2pt)
+Answer: 1. A competent trained operator
+2. Correct and up-to-date certification
+
+Q11)Explain the difference between an employing and user organisation.(2pt)
+Answer: Employing Organisation requires the load to be lifted 
+User Organisation and plan and manoeuvres the lift for the client.
+
+Q12)Who is responsible for providing the contractor with written details of the work to be done?(1pt)
+Answer: The Employing Organisation
+
+Q13)Where would the information relating to the additional requirements of an intermediate lift over a basic lift be sought?(1pt)
+Answer: Explained in BS 7121, 4.3.2 for basic lift, 4.3.3. for intermediate/standard lift
+
+Q14)To whom should the appointed person give all details involving the lifting
+operation?(1pt)
+Answer: Crane supervisor and anyone involved.
+
+Q15)Why is it recommended to complete a report after the completion of the lifting operation?(2pt)
+Answer: To evaluate the lifting operation where good practice can be utilized in future lifts or where the operation could have been planned more effectively. The client/contractor may further require written feedback on the operation.
+
+Q16)A change of crane lifting equipment operator is required. What must they be made aware of before continuing?(2pt)
+Answer: The lift plan and any other relevant issue.
+
+Q17) Name TWO duties of the crane operator.(2pt)
+Answer: I. Operate crane according to manufactures instructions
+2. Implement the lift plan and safe system of work
+
+Q18)Describe FOUR factors that need to be taken into account when specifying communication procedures for a lifting operation.(4pt)
+Answer: 1. Communication method established before the lift
+2. Banksman/Signaller shall be visible/audible at all times
+3. The operator shall obey stop signals whoever gives them
+4. The Person in Charge shall be clearly identified and made known to all members of the lift team and personnel in the proximity.
+
+Q19)If radios are to be used during the lifting operations, what FIVE actions and checks must be made before use?(5pt)
+Answer: 1. Check if people involved know how to use them
+2. Check if batteries will last for the duration of the operation or spare batteries are supplied
+3. Check if all involved in the lifting are on the same frequency (channel)
+4. Check if the signal strength is sufficient
+5. Check if the frequency is clear from other interferences
+
+Q20)Name the FOUR stages of the hierarchy of control for the marshalling of mobile lifting equipment.(4pt)
+Answer: 1. Elimination/substitution
+2. Engineering
+3. Administration
+4. PPE
+
+Q21)Name THREE factors to be taken into account when devising a mobile lifting equipment marshalling plan.(3pt)
+Answer: 1. Visibility
+2. Attaching / Detaching and securing loads
+3. Environment
+
+Q22)Name THREE possible effects that fatigue can have on a lifting team (3pt)
+Answer: 1. Decreased productivity
+2. Reduced safe working ability
+3. Absenteeism
+
+Q23)Name SIX principle factors should be taken into account in relation to
+fatigue management of a lifting operation.(6pt)
+Answer: 1. Comply with your organization's policies and procedures relating fatigue
+2. Understand your sleep, rest and recovery needs and obtain adequate rest and sleep away from work
+3. Seek medical advice and assistance if you have a concern about a health condition that affects your sleep or causes fatigue
+4. Look out for signs of fatigue at the people you work with
+5. In consultations with your supervisor, take steps to manage fatigue
+6. Maintain hydration
+
+Q24)State THREE occasions on which lifting equipment must be thoroughly examined.(3pt)
+Answer: 1. When lifting equipment is first supplied (used for the first time by the
+employer)
+2. When certain equipment is installed (e.g. tower crane)
+3. Periodically during the lifetime of the equipment
+4. Following exceptional circumstances
+
+Q25)How long is a thorough examination for a lifting accessory valid for?(1pt)
+Answer: 6 months.
+
+Q26)Name FOUR items that must be recorded when a thorough examination on a lifting appliance has been carried out.(4pt)
+Answer: 1. Defects
+2. SWL
+3. Model of the machine
+4. Examination location
+
+Q27)List TWO methods of obtaining the accurate weight of a load.(2pt)
+Answer: 1. Manufacturer's data
+2. Trial lift (using a weight load cell)
+
+Q28)During dismantling operations, what factor of safety is applied to the load?(1pt)
+Answer: Minimum of 20%
+
+Q29)If an object has to be dismantled above ground to be lifted to ground level (and can't be returned to the original position), what factor of safety should be applied?(1pt)
+Answer: 2:1
+
+Q30)Name THREE factors(configurations) that determine the rated lifting capacity of lifting equipment.(3pt)
+Answer: 1. Boom angle
+2. Spread of outriggers
+3. The radius
+
+Q31)What does the term 'structural strength' relate to with regard to the lifting capacity of any lifting equipment?(1pt)
+Answer: Structural strength refers to where the maximum SWL is limited by the structural strength of all relevant components. Example boom, outriggers, slew ring, chassis .
+
+Q32)Name the sections in 7121 where advice is given on 'Lifting without outriggers' and 'Pick and carry'.(1pt)
+Answer: 12.1.5 Lifting without outriggers
+12.1.6 Pick and Carry
+
+Q33)Define the term 'radius'.(1pt)
+Answer: The radius is the horizontal distance between the points at which the centre of rotation meets the ground and the vertical centre line passing through the load lifting attachment.
+
+Q34)If a crane is out of level, what effect will it have on the radius?(2pt)
+Answer: Increase on low side, decrease on high side.
+
+Q35)What is the definition of the term "outreach"?(1pt)
+Answer: The horizontal measurement from the centre of the hook block to the nearest part of the crane (excluding boom).
+
+Q36)If a load of 20 tonnes is lifted on four falls of rope, what is the tension in each fall?(1pt)
+Answer: 20 tonnes / 4 falls = 5 tonnes each fall
+
+Q37)What advantage is gained by increasing the number of falls on a hook block?(1pt)
+Answer: Increasing the falls could increase lifting capacity (for a particular configuration).
+
+Q38)State the safe procedure to be followed before lifting or lowering a load down a shaft or excavation.(2pt)
+Answer: The empty hook must be lowered down to working level and the hoist drum checked for sufficient turns on the drum.
+
+Q39)When planning a lifting operation to place loads below ground level, what needs to be taken into account when calculating the gross weight of the load?(2pt)
+Answer: The weight of the rope below ground level will need to be factored into the gross weight of the load.
+
+Q40)Explain the purpose of the over-hoist limit switch?(1pt)
+Answer: To stop the hook from hitting the boom head.
+
+Q41)What are the types of warning indicated by RCI and at what point are they activated?(2pt)
+Answer: AMBER 90-97.6%
+RED light with external alarm 102.5-110%
+
+Q42)a) Where would the duty board of a tower crane normally be located and
+b) Name FOUR types of information that it must contain (5pt)
+Answer: a) Located at the base of the tower crane
+b)
+1. Make
+2. Model
+3. Serial number
+4. Capacity at maximum radius
+
+Q43)How could the deflection of a boom or jib on a mobile-type crane affect a lift? (2pt)
+Answer: The boom deflection can cause an increase in the radius.
+
+Q44)Why must a lifting equipment operator never try to,' and 'drag' a load? (2pt)
+Answer: Because it can induce side loading on the boom (for which it wasn't designed) and can cause structural failure.
+
+Q45)On mobile and crawler cranes, in what situation can a single load be lifted using the fly jib hook block & min book hook block simultaneously?(1pt)
+Answer: If it is stated by the manufacturer.
+
+Q46)On both tracked and wheeled 360 degree excavators:(2pt)
+a) What differs between lifting over the side of the machine compared to lifting the front or the rear of the machine?
+b) Explain why.
+Answer: a) Increased stability when lifting over the front and back, over the side a reduction of capacity
+b) Reduced stability base
+
+Q47)Name FOUR factors relating to ground that a ground engineer would need to taken into account when determining the load bearing capacity of ground (4pt)
+Answer: 1. Ability of the ground to support the gross weight of the machine and load
+2. Integrity of adjacent ground to withstand lateral stresses imposed
+3. Levelling and preparation
+4. Underground services
+
+Q48)The area of mat size has been correctly specified for use with the outriggers of a mobile crane and the intended load and operating radius but the pad not stiff or rigid enough (e.g. it is too thin). Explain the possible consequence.(2pt)
+Answer: The mat will be unable to spread the outrigger point load uniformly and will risk sinking in and destabilizing the crane.
+
+Q49)Identify FOUR requirements for ensuring the stability of mobile cranes on site.(4pt)
+Answer: 1. Firm/level standing
+2. All outriggers extended accordingly
+3. Crane level both longitudinally and transversely
+4. All wheels clear of the ground
+5. Crane not overloaded
+
+Q50)Outline the role of the Temporary Works Coordinator.(2pt)
+Answer: 1. Co-ordinate all temporary works activities
+2. Ensure a temporary works register is established and maintained
+3. Ensure that responsibilities are accepted
+4. Ensure that a design brief is prepared with the actual situation on site
+
+Q51)Who is responsible for compiling all necessary documentation when lifting close proximity to a site boundary? E.g. protection fans?(1pt)
+Answer: Temp works coordinator
+
+Q52)A platform is being used to receive lifted loads of materials. What primary procedure must be in place to ensure that the platform being used is suitable and sufficient to hold the weight of the load?(1pt)
+Answer: Temporary works design.
+
+Q53)What are the THREE key fundamental aspects that need considering when preparing a design for any temporary works design/structure?(3pt)
+Answer: 1. foundation
+2. structure
+3. stability
+
+Q54)List FOUR items of information that must be included on a temporary works register.(4pt)
+Answer: 1. Design Checker
+2. Date design complete
+3. Date design checked/approved
+4. Erection complete and checked or "Permit to Load", "Permit to Dismantle"
+
+Q55)a) What is the recommended minimum exclusion zone around overhead power lines,(6pt)
+b) Where can this information be sourced and
+c) Explain why a distance from overhead power lines should be kept.
+Answer: a) 	275KW-400KW 7M
+	132KW 6M
+	11KW-33KW 3M
+	Low voltage 1M
+b) BS6 HSE
+c) Because electricity can arch across large gaps
+
+Q56)When planning a lift near a slope, what is the minimum distance to be kept between the supporting components of the lifting equipment and the slope?(2pt)
+Answer: Edge of the mat to the edge of the slope should be double of height of slope.
+
+Q57)If planning to lift loads In or near a pedestrianized area, what main factor needs to be taken into account?(2pt)
+Answer: Physical segregation of pedestrians from overhead loads. Create an exclusion zone.
+
+Q58)Two cranes are working in the same vicinity that encroach the operating radius of each. What actions should the lift plan or method statement normally specify?(3pt)
+Answer: Have crane coordinator in place or anti-collision and crash radios.
+
+Q59)In what circumstances would aviation warning lighting be required to high -type lifting equipment?(2pt)
+Answer: If the lifting equipment is within 6km of an aerodrome and the overall height exceeds 10 metres above nearby existing structures and trees.
+
+Q60)Identify 4 types of infrastructure where a responsible body or owner would have to be notified when planning a lift on or near by.(4pt)
+Answer: 1. Rivers
+2. Airfields
+3. Highways
+4. Railways
+5. Live plant
+
+Q61)Name a design of accessory hook that is exempt from being fitted with a safety catch.(1pt)
+Answer: A 'C' type Hook.
+
+Q62)Name THREE markings found on multiple-leg slings.(3pt)
+Answer: 1. SWL (WLL)
+2. Manufactures name
+3. Serial number
+
+Q63)State the maximum recommended included angle for single-leg slings when used as a pair.(1pt)
+Answer: Maximum 90 degrees.
+
+Q64)Give TWO methods of obtaining the centre of gravity on an unbalanced load.(2pt)
+Answer: 1. Calculation
+2. Trial lift
+
+Q65)In which applications are single leg slings rated with their own SWL (WLL)?(1pt)
+Answer: Only when used vertically.
+
+Q66)How is the SWL/WLL/rated capacity for multi-legs slings determined?(1pt)
+Answer: By the Uniform Load method.
+
+Q67)To lift a load of 20 tonnes on a 4 single leg chain sling, what is the required SWL (WLL) for each leg with an included angle of 87 degrees?(4pt)
+Please explain your calculation.
+Answer: 1. 9.52 tonnes/each leg
+2. When using 4 leg chain sling the same calculation as 3 leg chain sling is used because it is considered that not all 4 legs are taking the weight equal. So: 20 tonnes divided by 2.1 (mod factor for 3 legs and 87 degrees angle) = 9.52 tonne each leg. 4x10 slings needed.
+
+Q68)How should multiple accessories be connected to a crane hook?(1pt)
+Answer: Using a master ring and bow shackles.
+
+Q69)State SIX environmental factors that can affect an external lifting operation.(6pt)
+Answer: 1. wind
+2. Fog
+3. Mist
+4. Excessive rain
+5. Lightning
+6. Storms
+7. Ice and snow
+
+Q70)Name FOUR factors should be taken into account when calculating the effects of wind on a crane-based lifting operation(4pt)
+Answer: 1. The geometry and shape of the load
+2. The height to which the load is to be lifted
+3. The wind direction
+4. Operating between structures
+
+Q71)Give THREE examples of how excessive rain can affect an external lifting operation when using lifting equipment.(3pt)
+Answer: 1. Excessive rain can cause the ground to soften reducing the crane support
+2. Poor visibility
+3. Cause slippery conditions and reduce traction
+
+Q72) Outline THREE principle requirements for out of service procedures for tower cranes.(3pt)
+Answer: 1. Remove accessories and jib in free slew
+2. Out of radius of other cranes and obstructions
+3. Lock up and isolate crane
+
+Q73)Using the given lifting capacity diagram for the JC8 525/125 telescopic handler using a hook (A61):(4pt)
+a) What is the maximum lifting capacity?
+b) What is the maximum lifting capacity when free on wheels (FOW)
+c) What the maximum hook height where a load can be lifted
+d) What is the maximum lifting capacity when the hook is at a height of 8m and the boom at an angle of 4Sdegrees?
+Answer: a) 3500 kg
+ab) 0kg
+ac) 10m
+ad) 1000kg
+
+Q74)What does the helth and safety at work act require employers to do regards spcificaly to plant?(3pt)
+Answer: Provide and maintain plant that is safe and without risk to health so far as is resonably practicable.
+
+Q75) Name two possible penalties for not folowing local requirements. (2pt)
+Answer: fines or imprisonment
+
+Q76) When planning a lift for a lory loader activity and where it is adjacent to a slope, what is regarded as the minimum distance to be kept from a  sloped edge?(2pt)
+Answer: The horizonal distance from the foot to the top of the slope should be at least the distance from the top of the slope to the lory.
+
+Q77) What is the main aim of HASWA 1974 ? (2pt)
+Answer: To create a safe system of work.
+
+Q78) What is a load radious indicator?(1pt)
+Answer: A divice fitted to a crane that shows the radius at witch the crane is operating and is coresponding SWL (WLL)
+            `;
+            
+            return StorageService.parseQAText(rawData);
+        };
+
+        // Points color scheme
+        const getPointsColor = (points) => {
+            if (points <= 2) return 'bg-green-500 text-white';
+            if (points <= 4) return 'bg-yellow-500 text-white';
+            return 'bg-red-500 text-white';
+        };
 
         // Mobile Card Component
         function MobileCardItem({ card, onEdit, onDelete, onStudy }) {
@@ -932,12 +644,9 @@
                     <div className="p-4" onClick={() => setShowActions(!showActions)}>
                         <div className="flex justify-between items-start mb-2">
                             <h4 className="font-medium text-base leading-tight pr-2 flex-1">{card.question}</h4>
-                            <span className={`text-xs px-2 py-1 rounded flex-shrink-0 ${
-                                card.difficulty === 'easy' ? 'bg-green-500 text-white'
-                                : card.difficulty === 'medium' ? 'bg-yellow-500 text-white'
-                                : 'bg-red-500 text-white'
-                            }`}>
-                                {card.difficulty}
+                            <span className={`text-xs px-2 py-1 rounded flex-shrink-0 flex items-center gap-1 ${getPointsColor(card.points || 1)}`}>
+                                <Icon name="points" className="w-3 h-3" />
+                                {card.points || 1}pt
                             </span>
                         </div>
                         
@@ -999,74 +708,28 @@
             );
         }
 
-        // Mobile Study Card
+        // Mobile Study Card - Clean and Spacious
         function MobileStudyCard({ card, isFlipped, onFlip }) {
             const { state: { theme, settings } } = useFlashCards();
-            const speechTimeoutRef = useRef(null);
-            const lastCardIdRef = useRef(null);
-            const lastFlippedRef = useRef(null);
             
-            // Clear speech function
-            const clearSpeech = useCallback(() => {
-                SpeechService.stop();
-                if (speechTimeoutRef.current) {
-                    clearTimeout(speechTimeoutRef.current);
-                    speechTimeoutRef.current = null;
-                }
-            }, []);
-            
-            // Speech effect
+            // Auto-read when card loads or flips
             useEffect(() => {
-                clearSpeech();
-                
-                if (!settings.speechEnabled) return;
-                
-                const isCardChange = lastCardIdRef.current !== card.id;
-                const isFlipChange = lastFlippedRef.current !== isFlipped;
-                
-                lastCardIdRef.current = card.id;
-                lastFlippedRef.current = isFlipped;
-                
-                if (isCardChange) {
-                    if (settings.autoReadQuestion) {
-                        speechTimeoutRef.current = setTimeout(() => {
-                            if (lastCardIdRef.current === card.id && !isFlipped) {
-                                SpeechService.speak(card.question, settings);
-                            }
-                            speechTimeoutRef.current = null;
+                if (settings.speechEnabled) {
+                    if (isFlipped && settings.autoReadAnswer) {
+                        // Small delay to let flip animation complete
+                        setTimeout(() => {
+                            SpeechService.speak(card.answer, settings);
+                        }, 600);
+                    } else if (!isFlipped && settings.autoReadQuestion) {
+                        setTimeout(() => {
+                            SpeechService.speak(card.question, settings);
                         }, 300);
                     }
-                    return;
                 }
-                
-                if (isFlipChange) {
-                    const delay = 500;
-                    speechTimeoutRef.current = setTimeout(() => {
-                        if (lastCardIdRef.current === card.id && lastFlippedRef.current === isFlipped) {
-                            if (isFlipped && settings.autoReadAnswer) {
-                                SpeechService.speak(card.answer, settings);
-                            } else if (!isFlipped && settings.autoReadQuestion) {
-                                SpeechService.speak(card.question, settings);
-                            }
-                        }
-                        speechTimeoutRef.current = null;
-                    }, delay);
-                }
-            }, [card.id, isFlipped, settings.speechEnabled, settings.autoReadQuestion, settings.autoReadAnswer, clearSpeech]);
-            
-            useEffect(() => {
-                return () => {
-                    clearSpeech();
-                };
-            }, [clearSpeech]);
-            
-            const handleCardClick = () => {
-                clearSpeech();
-                onFlip();
-            };
+            }, [isFlipped, card, settings]);
             
             return (
-                <div className="relative w-full h-[28rem] perspective-1000" onClick={handleCardClick}>
+                <div className="relative w-full h-[28rem] perspective-1000" onClick={onFlip}>
                     <div className={`relative w-full h-full transition-transform duration-500 transform-style-preserve-3d cursor-pointer ${
                         isFlipped ? 'rotate-y-180' : ''
                     }`}>
@@ -1075,6 +738,13 @@
                                 ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
                                 : 'bg-gradient-to-br from-white to-gray-100'
                         } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                            
+                            <div className="absolute top-4 right-4">
+                                <span className={`text-sm px-3 py-1 rounded-full flex items-center gap-1 ${getPointsColor(card.points || 1)}`}>
+                                    <Icon name="points" className="w-4 h-4" />
+                                    {card.points || 1}pt
+                                </span>
+                            </div>
                             
                             <div className="flex-1 overflow-y-auto px-2 py-4 flex items-center justify-center">
                                 <div className="text-center w-full">
@@ -1089,9 +759,16 @@
                         
                         <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-2xl p-8 flex flex-col ${
                             theme === 'dark' 
-                                ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
-                                : 'bg-gradient-to-br from-white to-gray-100'
+                                ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
+                                : 'bg-gradient-to-br from-blue-50 to-blue-100'
                         } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                            
+                            <div className="absolute top-4 right-4">
+                                <span className={`text-sm px-3 py-1 rounded-full flex items-center gap-1 ${getPointsColor(card.points || 1)}`}>
+                                    <Icon name="points" className="w-4 h-4" />
+                                    {card.points || 1}pt
+                                </span>
+                            </div>
                             
                             <div className="flex-1 overflow-y-auto px-2 py-4 flex items-start justify-center">
                                 <div className="text-center w-full">
@@ -1108,477 +785,158 @@
             );
         }
 
-        // **NEW** Fullscreen Study Mode with Enhanced Animations and Gestures
-        function FullscreenStudyMode({ cards, currentIndex, isFlipped, onFlip, onNavigate, onExit }) {
-            const { state: { theme, settings } } = useFlashCards();
-            const touchStartRef = useRef({ x: 0, y: 0 });
-            const touchEndRef = useRef({ x: 0, y: 0 });
-            const [showHints, setShowHints] = useState(true);
-            const [slideDirection, setSlideDirection] = useState('');
-            const [isSliding, setIsSliding] = useState(false);
-            const [animationPhase, setAnimationPhase] = useState('idle'); // 'idle', 'slide-out', 'slide-in'
-            const [isTransitioning, setIsTransitioning] = useState(false); // For fade transition
-            const [dragOffset, setDragOffset] = useState(0); // For peek animation
-            const [isDragging, setIsDragging] = useState(false);
+        // Points Selection Modal
+        function PointsSelectionModal({ onSelect, onCancel, availablePoints, theme }) {
+            const [selectedPoints, setSelectedPoints] = useState([]);
             
-            const currentCard = cards[currentIndex];
-            const hasNext = currentIndex < cards.length - 1;
-            const hasPrev = currentIndex > 0;
-            const nextCard = hasNext ? cards[currentIndex + 1] : null;
-            const prevCard = hasPrev ? cards[currentIndex - 1] : null;
-            
-            // Clean question text by removing Q1), Q2), etc.
-            const cleanQuestion = currentCard.question.replace(/^Q\d+\)\s*/, '');
-            
-            // Peek thresholds
-            const PEEK_THRESHOLD = 50; // Minimum drag for peek
-            const NAVIGATE_THRESHOLD = 120; // Minimum drag for navigation
-            
-            // Hide hints after 3 seconds
-            useEffect(() => {
-                const timer = setTimeout(() => setShowHints(false), 3000);
-                return () => clearTimeout(timer);
-            }, [currentIndex]);
-            
-            // Reset drag offset when navigation happens
-            useEffect(() => {
-                setDragOffset(0);
-                setIsDragging(false);
-            }, [currentIndex]);
-            
-            // Reset drag offset when card flips
-            useEffect(() => {
-                setDragOffset(0);
-            }, [isFlipped]);
-            
-            // Speech effect for fullscreen mode
-            useEffect(() => {
-                SpeechService.stop();
-                
-                if (settings.speechEnabled && !isSliding && animationPhase === 'idle') {
-                    setTimeout(() => {
-                        if (!isFlipped && settings.autoReadQuestion) {
-                            SpeechService.speak(cleanQuestion, settings);
-                        } else if (isFlipped && settings.autoReadAnswer) {
-                            SpeechService.speak(currentCard.answer, settings);
-                        }
-                    }, 300);
-                }
-            }, [currentIndex, isFlipped, settings, isSliding, animationPhase]);
-            
-            // Enhanced navigation with staggered slide animation
-            const handleNavigateWithAnimation = (newIndex, direction) => {
-                if (isSliding || animationPhase !== 'idle') return; // Prevent multiple animations
-                
-                setIsSliding(true);
-                setSlideDirection(direction);
-                setAnimationPhase('slide-out');
-                
-                // Phase 1: Slide out current card (250ms)
-                setTimeout(() => {
-                    onNavigate(newIndex);
-                    setAnimationPhase('slide-in');
-                    
-                    // Phase 2: Slide in new card (250ms)
-                    setTimeout(() => {
-                        setSlideDirection('');
-                        setIsSliding(false);
-                        setAnimationPhase('idle');
-                    }, 250);
-                }, 250);
+            const togglePoint = (point) => {
+                setSelectedPoints(prev => 
+                    prev.includes(point) 
+                        ? prev.filter(p => p !== point)
+                        : [...prev, point]
+                );
             };
             
-            const handleCardClick = () => {
-                if (isSliding || animationPhase !== 'idle' || isTransitioning) return; // Prevent clicks during animations
-                
-                SpeechService.stop();
-                setIsTransitioning(true);
-                
-                // Fade transition: fade out, flip state, then fade in
-                setTimeout(() => {
-                    onFlip();
-                    setTimeout(() => {
-                        setIsTransitioning(false);
-                    }, 200); // Fade in duration
-                }, 200); // Fade out duration
+            const selectAll = () => {
+                setSelectedPoints(availablePoints);
             };
             
-            // Enhanced slide animation calculations
-            const getSlideTransform = () => {
-                if (animationPhase === 'slide-out') {
-                    return slideDirection === 'left' 
-                        ? 'translateX(-120%) translateZ(-200px) rotateY(-15deg) scale(0.8)'
-                        : 'translateX(120%) translateZ(-200px) rotateY(15deg) scale(0.8)';
-                } else if (animationPhase === 'slide-in') {
-                    return slideDirection === 'left'
-                        ? 'translateX(120%) translateZ(-200px) rotateY(15deg) scale(0.8)'
-                        : 'translateX(-120%) translateZ(-200px) rotateY(-15deg) scale(0.8)';
-                }
-                return 'translateX(0) translateZ(0) rotateY(0deg) scale(1)';
-            };
-            
-            const getSlideOpacity = () => {
-                if (animationPhase === 'slide-out') return 0;
-                if (animationPhase === 'slide-in') return 0.7;
-                return 1;
-            };
-            
-            // Touch handlers for gestures with peek animation
-            const handleTouchStart = (e) => {
-                const touch = e.touches[0];
-                touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-                setShowHints(false);
-                setIsDragging(true);
-                
-                // Add subtle touch feedback
-                e.currentTarget.style.transform = 'scale(0.99)';
-                e.currentTarget.style.transition = 'transform 0.1s ease-out';
-            };
-            
-            const handleTouchMove = (e) => {
-                if (!isDragging || isSliding || animationPhase !== 'idle' || isTransitioning) return;
-                
-                const touch = e.touches[0];
-                const deltaX = touch.clientX - touchStartRef.current.x;
-                
-                // Update drag offset for peek effect
-                setDragOffset(deltaX);
-            };
-            
-            const handleTouchEnd = (e) => {
-                // Remove touch feedback
-                e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.transition = 'transform 0.2s ease-out';
-                
-                setIsDragging(false);
-                
-                if (isSliding || animationPhase !== 'idle' || isTransitioning) return;
-                
-                const touch = e.changedTouches[0];
-                touchEndRef.current = { x: touch.clientX, y: touch.clientY };
-                
-                const deltaX = touchEndRef.current.x - touchStartRef.current.x;
-                const deltaY = touchEndRef.current.y - touchStartRef.current.y;
-                
-                const minSwipeDistance = 50;
-                
-                // Reset drag offset
-                setDragOffset(0);
-                
-                // Determine gesture type
-                if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > minSwipeDistance) {
-                    // Vertical swipe
-                    if (deltaY > 0) {
-                        // Swipe down - exit fullscreen with fade effect
-                        SpeechService.stop();
-                        e.currentTarget.style.opacity = '0';
-                        e.currentTarget.style.transform = 'scale(0.9) translateY(20px)';
-                        e.currentTarget.style.transition = 'all 0.3s ease-out';
-                        setTimeout(() => onExit(), 200);
-                    }
-                } else if (Math.abs(deltaX) > NAVIGATE_THRESHOLD) {
-                    // Large horizontal swipe - navigate
-                    SpeechService.stop();
-                    if (deltaX > 0) {
-                        // Swipe right - previous card
-                        if (currentIndex > 0) {
-                            handleNavigateWithAnimation(currentIndex - 1, 'right');
-                        }
-                    } else {
-                        // Swipe left - next card
-                        if (currentIndex < cards.length - 1) {
-                            handleNavigateWithAnimation(currentIndex + 1, 'left');
-                        }
-                    }
-                } else if (Math.abs(deltaX) < 30 && Math.abs(deltaY) < 30) {
-                    // Small movement - flip card
-                    handleCardClick();
-                }
-                // Medium swipes (between peek and navigate) do nothing - just return to center
+            const clearAll = () => {
+                setSelectedPoints([]);
             };
             
             return (
-                <div className={`fixed inset-0 z-50 ${
-                    theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'
-                } flex flex-col`}>
-                    {/* Header with counter */}
-                    <div className={`flex justify-between items-center p-4 ${
-                        theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-                    } border-b`}>
-                        <div className="text-lg font-semibold">
-                            {currentIndex + 1} / {cards.length}
-                        </div>
-                        <button
-                            onClick={onExit}
-                            className={`p-2 rounded-lg ${
-                                theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                            }`}
-                        >
-                            ✕
-                        </button>
-                    </div>
-                    
-                    {/* Progress bar */}
-                    <div className={`h-1 ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'}`}>
-                        <div
-                            className="h-full bg-blue-500 transition-all duration-300"
-                            style={{ width: `${((currentIndex + 1) / cards.length) * 100}%` }}
-                        />
-                    </div>
-                    
-                    {/* Main card area with peek animation */}
-                    <div 
-                        className="flex-1 flex items-center justify-center p-4 perspective-1000 relative overflow-hidden"
-                        onTouchStart={handleTouchStart}
-                        onTouchMove={handleTouchMove}
-                        onTouchEnd={handleTouchEnd}
-                    >
-                        {/* Previous card preview (right side when dragging right) */}
-                        {prevCard && Math.abs(dragOffset) > PEEK_THRESHOLD && dragOffset > 0 && (
-                            <div 
-                                className="absolute left-0 top-0 w-full h-full flex items-center justify-center p-4"
-                                style={{
-                                    transform: `translateX(${Math.min(dragOffset - 100, 0)}px) scale(2)`,
-                                    opacity: Math.min(Math.abs(dragOffset) / NAVIGATE_THRESHOLD, 0.8),
-                                    transformOrigin: 'center center'
-                                }}
-                            >
-                                <div className={`w-full max-w-2xl h-full rounded-3xl p-8 flex flex-col ${
-                                    theme === 'dark' 
-                                        ? 'bg-gradient-to-br from-gray-700 via-gray-800 to-gray-700 text-white' 
-                                        : 'bg-gradient-to-br from-gray-100 via-gray-200 to-gray-100'
-                                } shadow-xl overflow-hidden border-2 ${
-                                    theme === 'dark' ? 'border-gray-500' : 'border-gray-300'
-                                }`}>
-                                    <div className="text-center mb-4">
-                                        <div className="text-2xl font-light tracking-widest opacity-60">
-                                            QUESTION {currentIndex}
-                                        </div>
-                                    </div>
-                                    {/* No text content during peek */}
-                                </div>
-                            </div>
-                        )}
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className={`w-full max-w-sm rounded-2xl p-6 ${
+                        theme === 'dark' ? 'bg-gray-900' : 'bg-white'
+                    }`}>
+                        <h3 className="text-xl font-semibold mb-4">Select Point Values</h3>
+                        <p className={`text-sm mb-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                            Choose which point values to study:
+                        </p>
                         
-                        {/* Next card preview (left side when dragging left) */}
-                        {nextCard && Math.abs(dragOffset) > PEEK_THRESHOLD && dragOffset < 0 && (
-                            <div 
-                                className="absolute right-0 top-0 w-full h-full flex items-center justify-center p-4"
-                                style={{
-                                    transform: `translateX(${Math.max(dragOffset + 100, 0)}px) scale(2)`,
-                                    opacity: Math.min(Math.abs(dragOffset) / NAVIGATE_THRESHOLD, 0.8),
-                                    transformOrigin: 'center center'
-                                }}
-                            >
-                                <div className={`w-full max-w-2xl h-full rounded-3xl p-8 flex flex-col ${
-                                    theme === 'dark' 
-                                        ? 'bg-gradient-to-br from-gray-700 via-gray-800 to-gray-700 text-white' 
-                                        : 'bg-gradient-to-br from-gray-100 via-gray-200 to-gray-100'
-                                } shadow-xl overflow-hidden border-2 ${
-                                    theme === 'dark' ? 'border-gray-500' : 'border-gray-300'
-                                }`}>
-                                    <div className="text-center mb-4">
-                                        <div className="text-2xl font-light tracking-widest opacity-60">
-                                            QUESTION {currentIndex + 2}
-                                        </div>
-                                    </div>
-                                    {/* No text content during peek */}
-                                </div>
-                            </div>
-                        )}
-                        
-                        {/* Big question numbers when dragging */}
-                        {Math.abs(dragOffset) > PEEK_THRESHOLD && (
-                            <>
-                                {/* Previous question number (when dragging right) */}
-                                {dragOffset > 0 && hasPrev && (
-                                    <div 
-                                        className="absolute left-8 top-1/2 transform -translate-y-1/2 pointer-events-none z-20"
-                                        style={{
-                                            opacity: Math.min(Math.abs(dragOffset) / NAVIGATE_THRESHOLD, 0.8)
-                                        }}
-                                    >
-                                        <div className={`text-20xl font-bold ${
-                                            theme === 'dark' ? 'text-white' : 'text-gray-800'
-                                        }`} style={{ fontSize: '10rem', lineHeight: '1' }}>
-                                            {currentIndex}
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                {/* Next question number (when dragging left) */}
-                                {dragOffset < 0 && hasNext && (
-                                    <div 
-                                        className="absolute right-8 top-1/2 transform -translate-y-1/2 pointer-events-none z-20"
-                                        style={{
-                                            opacity: Math.min(Math.abs(dragOffset) / NAVIGATE_THRESHOLD, 0.8)
-                                        }}
-                                    >
-                                        <div className={`text-20xl font-bold ${
-                                            theme === 'dark' ? 'text-white' : 'text-gray-800'
-                                        }`} style={{ fontSize: '10rem', lineHeight: '1' }}>
-                                            {currentIndex + 2}
-                                        </div>
-                                    </div>
-                                )}
-                            </>
-                        )}
-                        
-                        {/* Main current card */}
-                        <div 
-                            className={`relative w-full max-w-2xl h-full cursor-pointer transition-all duration-300 ease-out z-10`}
-                            style={{
-                                transform: `${getSlideTransform()} translateX(${Math.max(-50, Math.min(50, dragOffset * 0.3))}px)`,
-                                transition: isDragging ? 'none' : 'all 0.5s cubic-bezier(0.4, 0.0, 0.2, 1)',
-                                filter: animationPhase !== 'idle' ? 'blur(1px)' : 'blur(0px)',
-                                opacity: getSlideOpacity()
-                            }}
-                            onClick={handleCardClick}
-                        >
-                            {/* Single card container with fade transition */}
-                            <div className={`w-full h-full rounded-3xl p-8 flex flex-col ${
-                                theme === 'dark' 
-                                    ? 'bg-gradient-to-br from-gray-800 via-gray-900 to-gray-800 text-white' 
-                                    : 'bg-gradient-to-br from-white via-gray-50 to-white'
-                            } shadow-2xl overflow-hidden border-2 ${
-                                theme === 'dark' ? 'border-gray-600' : 'border-gray-200'
-                            } transition-opacity duration-200`}
-                            style={{
-                                opacity: isTransitioning ? 0.3 : 1,
-                                boxShadow: `
-                                    0 25px 50px -12px rgba(0, 0, 0, 0.25),
-                                    0 0 30px rgba(59, 130, 246, ${isTransitioning ? '0.3' : '0.1'})
-                                `
-                            }}>
-                                {/* Enhanced label with dynamic numbering - 50% bigger */}
-                                <div className="text-center mb-4">
-                                    <div className={`text-2xl font-light tracking-widest transition-all duration-300 ${
-                                        isTransitioning ? 'opacity-20 scale-95' : 'opacity-40'
+                        <div className="grid grid-cols-3 gap-3 mb-4">
+                            {availablePoints.map(point => (
+                                <button
+                                    key={point}
+                                    onClick={() => togglePoint(point)}
+                                    className={`py-3 rounded-xl border transition-all ${
+                                        selectedPoints.includes(point)
+                                            ? getPointsColor(point) + ' border-transparent'
+                                            : theme === 'dark'
+                                            ? 'border-gray-700 hover:border-gray-600'
+                                            : 'border-gray-300 hover:border-gray-400'
                                     }`}
-                                    style={{
-                                        textShadow: isTransitioning ? '0 0 20px rgba(59, 130, 246, 0.5)' : 'none'
-                                    }}>
-                                        {isFlipped ? `ANSWER ${currentIndex + 1}` : `QUESTION ${currentIndex + 1}`}
-                                    </div>
-                                </div>
-                                
-                                {/* Content back to original size */}
-                                <div className="flex-1 overflow-y-auto flex items-center justify-center">
-                                    <div className="text-center w-full">
-                                        <h2 className={`text-xl md:text-2xl font-medium leading-relaxed whitespace-pre-line transition-all duration-300 ${
-                                            isTransitioning ? 'opacity-30 scale-98' : 'opacity-100 scale-100'
-                                        }`}>
-                                            {isFlipped ? currentCard.answer : cleanQuestion}
-                                        </h2>
-                                    </div>
-                                </div>
-                                
-                                {/* Page numbers without triangular corners */}
-                                {hasPrev && (
-                                    <div className="absolute bottom-4 left-4">
-                                        <div className="text-xs font-bold text-gray-600 dark:text-gray-300">
-                                            {currentIndex}
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                {hasNext && (
-                                    <div className="absolute bottom-4 right-4">
-                                        <div className="text-xs font-bold text-gray-600 dark:text-gray-300">
-                                            {currentIndex + 2}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                                >
+                                    <Icon name="points" className="w-4 h-4 inline mr-1" />
+                                    {point}pt
+                                </button>
+                            ))}
+                        </div>
+                        
+                        <div className="flex gap-2 mb-4">
+                            <button
+                                onClick={selectAll}
+                                className={`flex-1 py-2 px-3 rounded-lg text-sm ${
+                                    theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'
+                                }`}
+                            >
+                                Select All
+                            </button>
+                            <button
+                                onClick={clearAll}
+                                className={`flex-1 py-2 px-3 rounded-lg text-sm ${
+                                    theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'
+                                }`}
+                            >
+                                Clear All
+                            </button>
+                        </div>
+                        
+                        <div className="flex gap-3">
+                            <button
+                                onClick={onCancel}
+                                className={`flex-1 py-3 rounded-xl border ${
+                                    theme === 'dark' 
+                                        ? 'border-gray-700 hover:bg-gray-800' 
+                                        : 'border-gray-300 hover:bg-gray-100'
+                                } transition-colors font-medium`}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => onSelect(selectedPoints)}
+                                disabled={selectedPoints.length === 0}
+                                className="flex-1 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                            >
+                                Study ({selectedPoints.length} selected)
+                            </button>
                         </div>
                     </div>
-                    
-                    {/* Enhanced gesture hints with animation */}
-                    {showHints && (
-                        <div className={`absolute bottom-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-2xl ${
-                            theme === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-white text-gray-600'
-                        } shadow-xl text-sm text-center backdrop-blur-md bg-opacity-90 border border-opacity-20 ${
-                            theme === 'dark' ? 'border-gray-600' : 'border-gray-300'
-                        } animate-pulse`}
-                        style={{
-                            animation: 'fadeInUp 0.5s ease-out, pulse 2s infinite',
-                            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 0 20px rgba(59, 130, 246, 0.1)'
-                        }}>
-                            <div className="flex items-center justify-center gap-1 text-xs">
-                                <span className="animate-bounce">👆</span> Tap to flip • 
-                                <span className="animate-bounce" style={{animationDelay: '0.1s'}}>←</span> 
-                                <span className="animate-bounce" style={{animationDelay: '0.2s'}}>→</span> Drag to peek • 
-                                <span className="animate-bounce" style={{animationDelay: '0.3s'}}>↓</span> Swipe down to exit
-                            </div>
-                        </div>
-                    )}
                 </div>
             );
         }
 
-        // **NEW** Enhanced Study Mode with Fullscreen Support
+        // Study Mode Component
         function MobileStudyMode({ cards, onComplete }) {
             const { state: { theme } } = useFlashCards();
             const [currentIndex, setCurrentIndex] = useState(0);
             const [isFlipped, setIsFlipped] = useState(false);
-            const [isFullscreen, setIsFullscreen] = useState(false);
+            const [results, setResults] = useState({ correct: 0, incorrect: 0 });
             const [startTime] = useState(Date.now());
             const [showCompletePrompt, setShowCompletePrompt] = useState(false);
+            const [isProcessing, setIsProcessing] = useState(false);
             
             const currentCard = cards[currentIndex];
             const progress = ((currentIndex + 1) / cards.length) * 100;
             
+            // Calculate total points
+            const totalPoints = useMemo(() => {
+                return cards.reduce((sum, card) => sum + (card.points || 1), 0);
+            }, [cards]);
+            
+            const earnedPoints = useMemo(() => {
+                return cards.slice(0, currentIndex).reduce((sum, card, idx) => {
+                    if (results.correct > idx) return sum + (card.points || 1);
+                    return sum;
+                }, 0);
+            }, [cards, currentIndex, results]);
+            
+            // Stop speech when component unmounts or session ends
             useEffect(() => {
                 return () => {
                     SpeechService.stop();
                 };
             }, []);
             
-            useEffect(() => {
-                if (showCompletePrompt) {
-                    SpeechService.stop();
-                }
-            }, [showCompletePrompt]);
-            
-            useEffect(() => {
-                SpeechService.stop();
-            }, [currentIndex]);
-            
-            const handleFlip = () => {
-                setIsFlipped(!isFlipped);
-            };
-            
-            const handleNavigate = (newIndex) => {
-                if (newIndex >= 0 && newIndex < cards.length) {
-                    setCurrentIndex(newIndex);
-                    setIsFlipped(false);
-                }
-            };
-            
-            const handleNext = () => {
-                if (currentIndex < cards.length - 1) {
-                    handleNavigate(currentIndex + 1);
-                } else {
-                    setShowCompletePrompt(true);
-                }
+            const handleResponse = (isCorrect) => {
+                if (isProcessing) return; // Prevent double clicks
+                
+                setIsProcessing(true);
+                SpeechService.stop(); // Stop any ongoing speech
+                
+                // Update results immediately
+                setResults(prev => ({
+                    ...prev,
+                    [isCorrect ? 'correct' : 'incorrect']: prev[isCorrect ? 'correct' : 'incorrect'] + 1
+                }));
+                
+                // Short delay for visual feedback, then advance
+                setTimeout(() => {
+                    if (currentIndex < cards.length - 1) {
+                        setCurrentIndex(prev => prev + 1);
+                        setIsFlipped(false);
+                        setIsProcessing(false);
+                    } else {
+                        setShowCompletePrompt(true);
+                        setIsProcessing(false);
+                    }
+                }, 300); // Reduced from 800ms to 300ms
             };
             
             const handleComplete = () => {
                 const duration = Math.floor((Date.now() - startTime) / 1000);
-                SpeechService.stop();
-                onComplete({ 
-                    correct: cards.length,
-                    incorrect: 0, 
-                    duration 
-                });
-            };
-            
-            const handleFullscreen = () => {
-                setIsFullscreen(true);
-            };
-            
-            const handleExitFullscreen = () => {
-                setIsFullscreen(false);
+                onComplete({ ...results, duration });
             };
             
             if (!currentCard) {
@@ -1592,20 +950,6 @@
                 );
             }
             
-            // **FULLSCREEN MODE**
-            if (isFullscreen) {
-                return (
-                    <FullscreenStudyMode
-                        cards={cards}
-                        currentIndex={currentIndex}
-                        isFlipped={isFlipped}
-                        onFlip={handleFlip}
-                        onNavigate={handleNavigate}
-                        onExit={handleExitFullscreen}
-                    />
-                );
-            }
-            
             return (
                 <div className="space-y-4 pb-6">
                     <div className="p-4 rounded-xl">
@@ -1613,17 +957,20 @@
                             <span className="text-sm font-medium">
                                 Question {currentIndex + 1} of {cards.length}
                             </span>
-                            {/* **FULLSCREEN BUTTON** */}
-                            <button
-                                onClick={handleFullscreen}
-                                className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                                    theme === 'dark' 
-                                        ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
-                                        : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                                } transition-colors`}
-                            >
-                                🔳 Fullscreen
-                            </button>
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-1">
+                                    <Icon name="points" className="w-4 h-4 text-blue-500" />
+                                    <span className="text-sm font-medium">{totalPoints}pt total</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Icon name="check" className="w-4 h-4 text-green-500" />
+                                    <span className="text-sm font-medium">{results.correct}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Icon name="x" className="w-4 h-4 text-red-500" />
+                                    <span className="text-sm font-medium">{results.incorrect}</span>
+                                </div>
+                            </div>
                         </div>
                         <div className={`h-2 rounded-full overflow-hidden ${
                             theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
@@ -1639,32 +986,50 @@
                         <MobileStudyCard
                             card={currentCard}
                             isFlipped={isFlipped}
-                            onFlip={handleFlip}
+                            onFlip={() => !isProcessing && setIsFlipped(!isFlipped)}
                         />
                     </div>
                     
                     <div className="px-4">
-                        <div className="grid grid-cols-2 gap-3">
+                        {isFlipped ? (
+                            <div className="space-y-3">
+                                <p className={`text-center text-sm ${
+                                    theme === 'dark' ? 'text-gray-300' : 'text-gray-600'
+                                }`}>
+                                    How well did you know this answer?
+                                </p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => handleResponse(false)}
+                                        disabled={isProcessing}
+                                        className={`py-4 bg-red-500 text-white rounded-xl hover:bg-red-600 font-medium transition-all active:scale-95 ${
+                                            isProcessing ? 'opacity-50 cursor-not-allowed' : ''
+                                        }`}
+                                    >
+                                        ❌ Didn't Know
+                                    </button>
+                                    <button
+                                        onClick={() => handleResponse(true)}
+                                        disabled={isProcessing}
+                                        className={`py-4 bg-green-500 text-white rounded-xl hover:bg-green-600 font-medium transition-all active:scale-95 ${
+                                            isProcessing ? 'opacity-50 cursor-not-allowed' : ''
+                                        }`}
+                                    >
+                                        ✅ I Knew It
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
                             <button
-                                onClick={() => handleNavigate(currentIndex - 1)}
-                                disabled={currentIndex === 0}
-                                className={`py-3 rounded-xl border font-medium transition-all ${
-                                    currentIndex === 0
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : theme === 'dark'
-                                        ? 'border-gray-700 hover:bg-gray-800'
-                                        : 'border-gray-300 hover:bg-gray-100'
+                                onClick={() => setIsFlipped(true)}
+                                disabled={isProcessing}
+                                className={`w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 text-lg font-medium transition-all active:scale-95 ${
+                                    isProcessing ? 'opacity-50 cursor-not-allowed' : ''
                                 }`}
                             >
-                                ← Previous
+                                Show Answer
                             </button>
-                            <button
-                                onClick={handleNext}
-                                className="py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium transition-all"
-                            >
-                                {currentIndex === cards.length - 1 ? 'Complete' : 'Next →'}
-                            </button>
-                        </div>
+                        )}
                     </div>
                     
                     {showCompletePrompt && (
@@ -1675,13 +1040,27 @@
                                 <h3 className="text-xl font-semibold mb-4 text-center">Session Complete! 🎉</h3>
                                 <div className="space-y-3 mb-6">
                                     <div className="flex justify-between">
-                                        <span>Cards reviewed:</span>
-                                        <span className="font-medium">{cards.length}</span>
+                                        <span>Cards studied:</span>
+                                        <span className="font-medium">{results.correct + results.incorrect}</span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span>Time spent:</span>
+                                        <span>Total points:</span>
+                                        <span className="font-medium">{totalPoints}pt</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>I knew it:</span>
+                                        <span className="font-medium text-green-500">{results.correct}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>Didn't know:</span>
+                                        <span className="font-medium text-red-500">{results.incorrect}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>Knowledge rate:</span>
                                         <span className="font-medium">
-                                            {Math.floor((Date.now() - startTime) / 60000)}m {Math.floor(((Date.now() - startTime) % 60000) / 1000)}s
+                                            {results.correct + results.incorrect > 0
+                                                ? Math.round((results.correct / (results.correct + results.incorrect)) * 100)
+                                                : 0}%
                                         </span>
                                     </div>
                                 </div>
@@ -1704,7 +1083,7 @@
             const [question, setQuestion] = useState(card?.question || '');
             const [answer, setAnswer] = useState(card?.answer || '');
             const [category, setCategory] = useState(card?.category || '');
-            const [difficulty, setDifficulty] = useState(card?.difficulty || 'medium');
+            const [points, setPoints] = useState(card?.points || 1);
             
             const handleSubmit = () => {
                 if (!question.trim() || !answer.trim()) return;
@@ -1714,7 +1093,7 @@
                     answer: answer.trim(),
                     category: category.trim(),
                     tags: [],
-                    difficulty,
+                    points: points,
                     media: [],
                 });
             };
@@ -1768,26 +1147,22 @@
                     </div>
                     
                     <div>
-                        <label className="block text-sm font-medium mb-3">Difficulty</label>
-                        <div className="grid grid-cols-3 gap-3">
-                            {['easy', 'medium', 'hard'].map(level => (
+                        <label className="block text-sm font-medium mb-3">Points</label>
+                        <div className="grid grid-cols-6 gap-2">
+                            {[1, 2, 3, 4, 5, 6].map(pt => (
                                 <button
-                                    key={level}
+                                    key={pt}
                                     type="button"
-                                    onClick={() => setDifficulty(level)}
+                                    onClick={() => setPoints(pt)}
                                     className={`py-3 rounded-xl border transition-colors text-sm font-medium ${
-                                        difficulty === level
-                                            ? level === 'easy'
-                                                ? 'bg-green-500 text-white border-green-500'
-                                                : level === 'medium'
-                                                ? 'bg-yellow-500 text-white border-yellow-500'
-                                                : 'bg-red-500 text-white border-red-500'
+                                        points === pt
+                                            ? getPointsColor(pt) + ' border-transparent'
                                             : theme === 'dark'
                                             ? 'border-gray-700 hover:border-gray-600'
                                             : 'border-gray-300 hover:border-gray-400'
                                     }`}
                                 >
-                                    {level.charAt(0).toUpperCase() + level.slice(1)}
+                                    {pt}pt
                                 </button>
                             ))}
                         </div>
@@ -1822,6 +1197,17 @@
         function FlashCardsProvider({ children }) {
             const [state, setState] = useState(() => {
                 const saved = StorageService.load();
+                // If saved data exists but cards don't have points, migrate them
+                if (saved?.cards) {
+                    saved.cards = saved.cards.map(card => {
+                        if (!card.points) {
+                            // Convert difficulty to points
+                            const pointsMap = { easy: 1, medium: 3, hard: 5 };
+                            return { ...card, points: pointsMap[card.difficulty] || 1 };
+                        }
+                        return card;
+                    });
+                }
                 return {
                     cards: saved?.cards || createDefaultCards(),
                     categories: saved?.categories || new Set(['Theory Questions']),
@@ -1937,10 +1323,6 @@
                         autoReadAnswer: !prev.settings.speechEnabled,
                     }
                 }));
-                
-                if (state.settings.speechEnabled) {
-                    SpeechService.stop();
-                }
             };
             
             const value = {
@@ -1966,18 +1348,21 @@
             const [activeView, setActiveView] = useState('cards');
             const [searchQuery, setSearchQuery] = useState('');
             const [selectedCategory, setSelectedCategory] = useState('');
+            const [selectedPoints, setSelectedPoints] = useState([]);
             const [showCardEditor, setShowCardEditor] = useState(false);
             const [editingCard, setEditingCard] = useState(undefined);
             const [isStudying, setIsStudying] = useState(false);
             const [showMenu, setShowMenu] = useState(false);
+            const [showPointsSelection, setShowPointsSelection] = useState(false);
+            const [studyCards, setStudyCards] = useState([]);
             
             const fileInputRef = React.useRef(null);
             
-            useEffect(() => {
-                if (activeView !== 'study' || !isStudying) {
-                    SpeechService.stop();
-                }
-            }, [activeView, isStudying]);
+            // Get unique point values
+            const availablePoints = useMemo(() => {
+                const points = [...new Set(cards.map(card => card.points || 1))].sort((a, b) => a - b);
+                return points;
+            }, [cards]);
             
             const handleImport = () => {
                 fileInputRef.current?.click();
@@ -1989,7 +1374,6 @@
                     `Are you sure you want to delete ALL ${cards.length} cards?\n\nThis action cannot be undone and will also clear all your study progress.`
                 );
                 if (confirmed) {
-                    SpeechService.stop();
                     clearAllCards();
                     setShowMenu(false);
                     alert('All cards have been cleared. You now have a clean slate!');
@@ -2011,6 +1395,7 @@
                     }
                 );
                 
+                // Reset file input
                 event.target.value = '';
             };
             
@@ -2022,10 +1407,11 @@
                         card.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
                     
                     const matchesCategory = !selectedCategory || card.category === selectedCategory;
+                    const matchesPoints = selectedPoints.length === 0 || selectedPoints.includes(card.points || 1);
                     
-                    return matchesSearch && matchesCategory;
+                    return matchesSearch && matchesCategory && matchesPoints;
                 });
-            }, [cards, searchQuery, selectedCategory]);
+            }, [cards, searchQuery, selectedCategory, selectedPoints]);
             
             const handleStudyComplete = (results) => {
                 addStudySession({
@@ -2037,19 +1423,25 @@
                 });
                 
                 setIsStudying(false);
+                setStudyCards([]);
             };
             
             const startStudyingCard = (card) => {
-                SpeechService.stop();
+                setStudyCards([card]);
                 setIsStudying(true);
                 setActiveView('study');
             };
             
-            const handleViewChange = (newView) => {
-                SpeechService.stop();
-                setActiveView(newView);
-                setIsStudying(false);
+            const handlePointsSelectionForStudy = (points) => {
+                const cardsToStudy = cards.filter(card => points.includes(card.points || 1));
+                setStudyCards(cardsToStudy);
+                setShowPointsSelection(false);
+                setIsStudying(true);
             };
+            
+            const totalPoints = useMemo(() => {
+                return cards.reduce((sum, card) => sum + (card.points || 1), 0);
+            }, [cards]);
             
             return (
                 <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
@@ -2086,7 +1478,7 @@
                             </div>
                             
                             {activeView === 'cards' && !isStudying && (
-                                <div className="mt-3">
+                                <div className="mt-3 space-y-3">
                                     <div className="relative">
                                         <Icon name="search" className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                                         <input
@@ -2101,6 +1493,46 @@
                                             } border focus:outline-none focus:ring-2 focus:ring-blue-500`}
                                         />
                                     </div>
+                                    
+                                    {/* Points filter */}
+                                    {availablePoints.length > 0 && (
+                                        <div className="flex gap-2 overflow-x-auto pb-1">
+                                            <button
+                                                onClick={() => setSelectedPoints([])}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
+                                                    selectedPoints.length === 0
+                                                        ? 'bg-blue-500 text-white'
+                                                        : theme === 'dark'
+                                                        ? 'bg-gray-800 text-gray-300'
+                                                        : 'bg-gray-200 text-gray-700'
+                                                }`}
+                                            >
+                                                All Points
+                                            </button>
+                                            {availablePoints.map(pt => (
+                                                <button
+                                                    key={pt}
+                                                    onClick={() => {
+                                                        setSelectedPoints(prev =>
+                                                            prev.includes(pt)
+                                                                ? prev.filter(p => p !== pt)
+                                                                : [...prev, pt]
+                                                        );
+                                                    }}
+                                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap flex items-center gap-1 ${
+                                                        selectedPoints.includes(pt)
+                                                            ? getPointsColor(pt)
+                                                            : theme === 'dark'
+                                                            ? 'bg-gray-800 text-gray-300'
+                                                            : 'bg-gray-200 text-gray-700'
+                                                    }`}
+                                                >
+                                                    <Icon name="points" className="w-3 h-3" />
+                                                    {pt}pt
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -2169,6 +1601,7 @@
                         </div>
                     )}
                     
+                    {/* Hidden file input for import */}
                     <input
                         ref={fileInputRef}
                         type="file"
@@ -2261,20 +1694,34 @@
                                     }`}>
                                         Test your knowledge with these flashcards
                                     </p>
-                                    <button
-                                        onClick={() => setIsStudying(true)}
-                                        disabled={filteredCards.length === 0}
-                                        className="w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
-                                    >
-                                        Start Studying ({filteredCards.length} cards)
-                                    </button>
+                                    
+                                    <div className="space-y-3">
+                                        <button
+                                            onClick={() => setShowPointsSelection(true)}
+                                            disabled={filteredCards.length === 0}
+                                            className="w-full py-4 bg-purple-500 text-white rounded-xl hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
+                                        >
+                                            Study by Points 🏆
+                                        </button>
+                                        
+                                        <button
+                                            onClick={() => {
+                                                setStudyCards(filteredCards);
+                                                setIsStudying(true);
+                                            }}
+                                            disabled={filteredCards.length === 0}
+                                            className="w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
+                                        >
+                                            Study All ({filteredCards.length} cards)
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
                         
                         {(activeView === 'study' || activeView === 'cards') && isStudying && (
                             <MobileStudyMode
-                                cards={filteredCards}
+                                cards={studyCards}
                                 onComplete={handleStudyComplete}
                             />
                         )}
@@ -2294,10 +1741,11 @@
                                     <div className={`p-4 rounded-xl ${
                                         theme === 'dark' ? 'bg-gray-800' : 'bg-white'
                                     } text-center`}>
-                                        <div className="text-2xl font-bold text-green-500">
-                                            {cards.filter(c => c.timesCorrect > 0).length}
+                                        <div className="text-2xl font-bold text-yellow-500 flex items-center justify-center gap-1">
+                                            <Icon name="points" className="w-6 h-6" />
+                                            {totalPoints}
                                         </div>
-                                        <div className="text-sm text-gray-500">Studied Cards</div>
+                                        <div className="text-sm text-gray-500">Total Points</div>
                                     </div>
                                     
                                     <div className={`p-4 rounded-xl ${
@@ -2312,10 +1760,42 @@
                                     <div className={`p-4 rounded-xl ${
                                         theme === 'dark' ? 'bg-gray-800' : 'bg-white'
                                     } text-center`}>
-                                        <div className="text-2xl font-bold text-yellow-500">
+                                        <div className="text-2xl font-bold text-green-500">
                                             {state.studySessions.length}
                                         </div>
                                         <div className="text-sm text-gray-500">Study Sessions</div>
+                                    </div>
+                                </div>
+                                
+                                {/* Points breakdown */}
+                                <div className={`p-4 rounded-xl ${
+                                    theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+                                }`}>
+                                    <h3 className="font-semibold mb-3">Points Distribution</h3>
+                                    <div className="space-y-2">
+                                        {availablePoints.map(pt => {
+                                            const count = cards.filter(c => (c.points || 1) === pt).length;
+                                            const percentage = (count / cards.length) * 100;
+                                            return (
+                                                <div key={pt} className="flex items-center gap-3">
+                                                    <span className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${getPointsColor(pt)}`}>
+                                                        <Icon name="points" className="w-3 h-3" />
+                                                        {pt}pt
+                                                    </span>
+                                                    <div className="flex-1">
+                                                        <div className={`h-2 rounded-full overflow-hidden ${
+                                                            theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
+                                                        }`}>
+                                                            <div
+                                                                className="h-full bg-blue-500 transition-all"
+                                                                style={{ width: `${percentage}%` }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-sm text-gray-500 w-12 text-right">{count}</span>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </div>
@@ -2350,12 +1830,24 @@
                         </div>
                     )}
                     
+                    {showPointsSelection && (
+                        <PointsSelectionModal
+                            onSelect={handlePointsSelectionForStudy}
+                            onCancel={() => setShowPointsSelection(false)}
+                            availablePoints={availablePoints}
+                            theme={theme}
+                        />
+                    )}
+                    
                     <nav className={`fixed bottom-0 left-0 right-0 z-40 ${
                         theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
                     } border-t`}>
                         <div className="flex justify-around py-2">
                             <button
-                                onClick={() => handleViewChange('cards')}
+                                onClick={() => { 
+                                    setActiveView('cards'); 
+                                    setIsStudying(false); 
+                                }}
                                 className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
                                     activeView === 'cards' && !isStudying 
                                         ? 'text-blue-500' 
@@ -2366,7 +1858,10 @@
                                 <span className="text-xs">Cards</span>
                             </button>
                             <button
-                                onClick={() => handleViewChange('study')}
+                                onClick={() => { 
+                                    setActiveView('study'); 
+                                    setIsStudying(false); 
+                                }}
                                 className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
                                     activeView === 'study' || isStudying 
                                         ? 'text-blue-500' 
@@ -2377,7 +1872,10 @@
                                 <span className="text-xs">Study</span>
                             </button>
                             <button
-                                onClick={() => handleViewChange('stats')}
+                                onClick={() => { 
+                                    setActiveView('stats'); 
+                                    setIsStudying(false); 
+                                }}
                                 className={`flex flex-col items-center p-3 rounded-lg transition-colors ${
                                     activeView === 'stats' 
                                         ? 'text-blue-500' 
@@ -2404,6 +1902,17 @@
 
         // Render the app
         ReactDOM.render(React.createElement(App), document.getElementById('root'));
+    </script>
+
+    <script>
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => console.log('SW registered: ', registration))
+                    .catch((registrationError) => console.log('SW registration failed: ', registrationError));
+            });
+        }
     </script>
 </body>
 </html>
