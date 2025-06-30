@@ -211,15 +211,52 @@
         const splitIntoSentences = (text) => {
             if (!text) return [];
             
-            // Enhanced sentence splitting that handles abbreviations and numbers better
-            const sentences = text
-                .replace(/([.!?]+)\s*([A-Z])/g, '$1|$2') // Split on sentence endings followed by capital letters
-                .replace(/(\d+\.)\s*([a-z])/g, '$1 $2') // Don't split on numbered lists
+            // Enhanced sentence splitting for various text formats
+            let sentences = [];
+            
+            // First try standard sentence splitting
+            const standardSplit = text
+                .replace(/([.!?]+)\s*([A-Z])/g, '$1|$2')
                 .split('|')
                 .map(s => s.trim())
                 .filter(s => s.length > 0);
             
-            return sentences;
+            if (standardSplit.length > 1) {
+                return standardSplit;
+            }
+            
+            // For shorter texts or lists, split by common patterns
+            if (text.includes('\n')) {
+                // Split by line breaks
+                sentences = text.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+            } else if (text.match(/[a-z]\)\s*[a-z]/gi)) {
+                // Split by lettered lists like "a) something b) something"
+                sentences = text.split(/(?=[a-z]\))/gi).map(s => s.trim()).filter(s => s.length > 0);
+            } else if (text.match(/\d+\.\s*[A-Z]/g)) {
+                // Split by numbered lists
+                sentences = text.split(/(?=\d+\.\s*[A-Z])/).map(s => s.trim()).filter(s => s.length > 0);
+            } else if (text.length > 50) {
+                // For longer single sentences, split by major punctuation or conjunctions
+                const parts = text.split(/(?:,\s*and\s*|,\s*or\s*|;\s*|:\s*)/g);
+                if (parts.length > 1) {
+                    sentences = parts.map(s => s.trim()).filter(s => s.length > 0);
+                } else {
+                    // Split long text into chunks of words
+                    const words = text.split(' ');
+                    if (words.length > 10) {
+                        const chunkSize = Math.ceil(words.length / 3);
+                        for (let i = 0; i < words.length; i += chunkSize) {
+                            sentences.push(words.slice(i, i + chunkSize).join(' '));
+                        }
+                    } else {
+                        sentences = [text];
+                    }
+                }
+            } else {
+                sentences = [text];
+            }
+            
+            return sentences.filter(s => s.length > 0);
         };
         
         // Achievement definitions
@@ -329,19 +366,27 @@
             
             static setupSentenceHighlighting(text, utterance, settings) {
                 const sentences = splitIntoSentences(text);
-                if (sentences.length <= 1) return;
+                console.log('Sentences to highlight:', sentences); // Debug log
+                
+                if (sentences.length <= 1) {
+                    console.log('Only one sentence, no highlighting needed');
+                    return;
+                }
                 
                 // Estimate timing based on speech rate and text length
                 const baseRate = settings.speechRate || 1.0;
-                const wordsPerMinute = 150 * baseRate; // Average speaking speed
-                let currentTime = 0;
+                const wordsPerMinute = 120 * baseRate; // Slower estimate for better sync
+                let currentTime = 500; // Start with a small delay
                 
                 sentences.forEach((sentence, index) => {
                     const words = sentence.split(' ').length;
-                    const duration = (words / wordsPerMinute) * 60 * 1000; // Convert to milliseconds
+                    const duration = Math.max(1000, (words / wordsPerMinute) * 60 * 1000); // Minimum 1 second per sentence
+                    
+                    console.log(`Sentence ${index}: "${sentence}" - Duration: ${duration}ms at ${currentTime}ms`);
                     
                     const timer = setTimeout(() => {
                         if (this.highlightCallback && this.isPlaying) {
+                            console.log(`Highlighting sentence ${index}: "${sentence}"`);
                             this.highlightCallback(index);
                         }
                     }, currentTime);
@@ -349,6 +394,16 @@
                     this.sentenceTimers.push(timer);
                     currentTime += duration;
                 });
+                
+                // Clear highlights at the end
+                const endTimer = setTimeout(() => {
+                    if (this.highlightCallback) {
+                        console.log('Clearing all highlights');
+                        this.highlightCallback(-1);
+                    }
+                }, currentTime + 500);
+                
+                this.sentenceTimers.push(endTimer);
             }
             
             static clearTimers() {
@@ -734,13 +789,18 @@
 
         // Highlighted Text Component
         const HighlightedText = memo(({ text, highlightedSentenceIndex, containerClassName = "" }) => {
-            const sentences = useMemo(() => splitIntoSentences(text), [text]);
+            const sentences = useMemo(() => {
+                const result = splitIntoSentences(text);
+                console.log('HighlightedText - Sentences:', result, 'Highlighted index:', highlightedSentenceIndex);
+                return result;
+            }, [text]);
             const sentenceRefs = useRef([]);
             
             useEffect(() => {
                 if (highlightedSentenceIndex >= 0 && highlightedSentenceIndex < sentences.length) {
                     const element = sentenceRefs.current[highlightedSentenceIndex];
                     if (element) {
+                        console.log('Scrolling to highlighted sentence:', highlightedSentenceIndex);
                         element.scrollIntoView({
                             behavior: 'smooth',
                             block: 'center',
@@ -750,9 +810,13 @@
                 }
             }, [highlightedSentenceIndex, sentences.length]);
             
+            // If only one sentence or no sentences, return plain text
             if (sentences.length <= 1) {
+                console.log('Rendering plain text, no sentences to highlight');
                 return <span className={containerClassName}>{text}</span>;
             }
+            
+            console.log('Rendering highlighted text with', sentences.length, 'sentences');
             
             return (
                 <div className={containerClassName}>
@@ -760,11 +824,21 @@
                         <span
                             key={index}
                             ref={el => sentenceRefs.current[index] = el}
-                            className={`${
+                            className={`inline ${
                                 highlightedSentenceIndex === index 
                                     ? 'sentence-highlight' 
                                     : 'sentence-normal'
                             }`}
+                            style={{
+                                transition: 'all 0.3s ease',
+                                ...(highlightedSentenceIndex === index ? {
+                                    backgroundColor: '#fef08a',
+                                    color: '#000',
+                                    padding: '2px 4px',
+                                    borderRadius: '4px',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                } : {})
+                            }}
                         >
                             {sentence}
                             {index < sentences.length - 1 ? ' ' : ''}
@@ -1388,15 +1462,22 @@
                             <div className="flex items-center gap-2">
                                 <span className="text-xs text-blue-500">Smart Review</span>
                                 {settings.speechEnabled && (
-                                    <button
-                                        onClick={() => {
-                                            SpeechService.stop();
-                                            setHighlightedSentenceIndex(-1);
-                                        }}
-                                        className="text-xs text-orange-500 hover:text-orange-600"
-                                    >
-                                        🔊 Stop
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => {
+                                                SpeechService.stop();
+                                                setHighlightedSentenceIndex(-1);
+                                            }}
+                                            className="text-xs text-orange-500 hover:text-orange-600"
+                                        >
+                                            🔊 Stop
+                                        </button>
+                                        {highlightedSentenceIndex >= 0 && (
+                                            <span className="text-xs text-yellow-500 animate-pulse">
+                                                ✨ Reading {highlightedSentenceIndex + 1}
+                                            </span>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -1567,15 +1648,22 @@
                                     <span className="text-sm font-medium">{totalPoints}pt total</span>
                                 </div>
                                 {settings.speechEnabled && (
-                                    <button
-                                        onClick={() => {
-                                            SpeechService.stop();
-                                            setHighlightedSentenceIndex(-1);
-                                        }}
-                                        className="text-xs text-orange-500 hover:text-orange-600"
-                                    >
-                                        🔊 Stop
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => {
+                                                SpeechService.stop();
+                                                setHighlightedSentenceIndex(-1);
+                                            }}
+                                            className="text-xs text-orange-500 hover:text-orange-600"
+                                        >
+                                            🔊 Stop
+                                        </button>
+                                        {highlightedSentenceIndex >= 0 && (
+                                            <span className="text-xs text-yellow-500 animate-pulse">
+                                                ✨ Reading {highlightedSentenceIndex + 1}
+                                            </span>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         </div>
