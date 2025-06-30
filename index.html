@@ -369,15 +369,24 @@
                     return;
                 }
                 
-                // Create character position map for each sentence
-                let charPosition = 0;
-                const sentenceMap = sentences.map((sentence, index) => {
-                    const start = charPosition;
-                    const end = charPosition + sentence.length;
-                    charPosition = end + 1; // +1 for space between sentences
-                    
-                    console.log(`Sentence ${index}: "${sentence}" - chars ${start}-${end}`);
-                    return { sentence, index, start, end };
+                // Create character position map based on ORIGINAL TEXT
+                const sentenceMap = [];
+                let searchPosition = 0;
+                
+                sentences.forEach((sentence, index) => {
+                    // Find where this sentence appears in the original text
+                    const sentenceStart = text.indexOf(sentence, searchPosition);
+                    if (sentenceStart !== -1) {
+                        const sentenceEnd = sentenceStart + sentence.length;
+                        sentenceMap.push({
+                            sentence,
+                            index,
+                            start: sentenceStart,
+                            end: sentenceEnd
+                        });
+                        searchPosition = sentenceEnd;
+                        console.log(`Sentence ${index}: "${sentence}" - chars ${sentenceStart}-${sentenceEnd} in original text`);
+                    }
                 });
                 
                 let currentHighlightedIndex = -1;
@@ -387,7 +396,7 @@
                     if (!this.isPlaying || !this.highlightCallback) return;
                     
                     const charIndex = event.charIndex;
-                    console.log(`Boundary event: character ${charIndex}`);
+                    console.log(`🎯 Boundary event: character ${charIndex}, current text: "${text.substring(charIndex, charIndex + 10)}..."`);
                     
                     // Find which sentence contains this character position
                     const currentSentence = sentenceMap.find(s => 
@@ -395,9 +404,22 @@
                     );
                     
                     if (currentSentence && currentSentence.index !== currentHighlightedIndex) {
-                        console.log(`Highlighting sentence ${currentSentence.index}: "${currentSentence.sentence}"`);
+                        console.log(`✨ Highlighting sentence ${currentSentence.index}: "${currentSentence.sentence}"`);
                         currentHighlightedIndex = currentSentence.index;
                         this.highlightCallback(currentSentence.index);
+                    } else if (!currentSentence) {
+                        // Try to find the closest sentence if exact match fails
+                        const closestSentence = sentenceMap.reduce((closest, s) => {
+                            const distance = Math.abs(charIndex - s.start);
+                            const closestDistance = Math.abs(charIndex - closest.start);
+                            return distance < closestDistance ? s : closest;
+                        }, sentenceMap[0]);
+                        
+                        if (closestSentence && closestSentence.index !== currentHighlightedIndex) {
+                            console.log(`🔄 Fallback highlighting sentence ${closestSentence.index}: "${closestSentence.sentence}"`);
+                            currentHighlightedIndex = closestSentence.index;
+                            this.highlightCallback(closestSentence.index);
+                        }
                     }
                 };
                 
@@ -405,7 +427,7 @@
                 if (this.highlightCallback) {
                     setTimeout(() => {
                         if (this.isPlaying && currentHighlightedIndex === -1) {
-                            console.log('Fallback: Highlighting first sentence');
+                            console.log('🚀 Fallback: Highlighting first sentence');
                             this.highlightCallback(0);
                             currentHighlightedIndex = 0;
                         }
