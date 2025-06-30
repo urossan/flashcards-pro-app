@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1f2937">
-    <title>Flash Cards Pro v6.5</title>
+    <title>Flash Cards Pro v6.6</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -135,8 +135,8 @@
         // CONSTANTS & UTILITIES
         // ========================================
         
-        const APP_VERSION = '6.5';
-        const STORAGE_KEY = 'flashcards-pro-v65';
+        const APP_VERSION = '6.6';
+        const STORAGE_KEY = 'flashcards-pro-v66';
         
         // Spaced Repetition Algorithm
         const calculateNextReview = (easeFactor, interval, quality) => {
@@ -307,7 +307,6 @@
             static isPlaying = false;
             static isSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
             static highlightCallback = null;
-            static sentenceTimers = [];
             
             static speak(text, settings = {}, onSentenceHighlight = null) {
                 if (!this.isSupported || !settings.speechEnabled || !text?.trim()) return;
@@ -331,15 +330,14 @@
                     this.currentUtterance = utterance;
                     this.isPlaying = true;
                     
-                    // If we have a highlight callback, implement sentence tracking
+                    // Set up real-time boundary detection
                     if (onSentenceHighlight) {
-                        this.setupSentenceHighlighting(text, utterance, settings);
+                        this.setupBoundaryHighlighting(text, utterance);
                     }
                     
                     utterance.onend = () => {
                         this.currentUtterance = null;
                         this.isPlaying = false;
-                        this.clearTimers();
                         if (onSentenceHighlight) {
                             onSentenceHighlight(-1); // Clear all highlights
                         }
@@ -349,7 +347,6 @@
                         console.warn('Speech synthesis error:', error);
                         this.currentUtterance = null;
                         this.isPlaying = false;
-                        this.clearTimers();
                         if (onSentenceHighlight) {
                             onSentenceHighlight(-1);
                         }
@@ -360,50 +357,60 @@
                     console.error('Speech service error:', error);
                     this.currentUtterance = null;
                     this.isPlaying = false;
-                    this.clearTimers();
                 }
             }
             
-            static setupSentenceHighlighting(text, utterance, settings) {
+            static setupBoundaryHighlighting(text, utterance) {
                 const sentences = splitIntoSentences(text);
-                console.log('Sentences to highlight:', sentences); // Debug log
+                console.log('Setting up boundary highlighting for sentences:', sentences);
                 
                 if (sentences.length <= 1) {
-                    console.log('Only one sentence, no highlighting needed');
+                    console.log('Only one sentence, no boundary highlighting needed');
                     return;
                 }
                 
-                // Estimate timing based on speech rate and text length
-                const baseRate = settings.speechRate || 1.0;
-                const wordsPerMinute = 120 * baseRate; // Slower estimate for better sync
-                let currentTime = 500; // Start with a small delay
-                
-                sentences.forEach((sentence, index) => {
-                    const words = sentence.split(' ').length;
-                    const duration = Math.max(1000, (words / wordsPerMinute) * 60 * 1000); // Minimum 1 second per sentence
+                // Create character position map for each sentence
+                let charPosition = 0;
+                const sentenceMap = sentences.map((sentence, index) => {
+                    const start = charPosition;
+                    const end = charPosition + sentence.length;
+                    charPosition = end + 1; // +1 for space between sentences
                     
-                    console.log(`Sentence ${index}: "${sentence}" - Duration: ${duration}ms at ${currentTime}ms`);
-                    
-                    const timer = setTimeout(() => {
-                        if (this.highlightCallback && this.isPlaying) {
-                            console.log(`Highlighting sentence ${index}: "${sentence}"`);
-                            this.highlightCallback(index);
-                        }
-                    }, currentTime);
-                    
-                    this.sentenceTimers.push(timer);
-                    currentTime += duration;
+                    console.log(`Sentence ${index}: "${sentence}" - chars ${start}-${end}`);
+                    return { sentence, index, start, end };
                 });
                 
-                // Clear highlights at the end
-                const endTimer = setTimeout(() => {
-                    if (this.highlightCallback) {
-                        console.log('Clearing all highlights');
-                        this.highlightCallback(-1);
-                    }
-                }, currentTime + 500);
+                let currentHighlightedIndex = -1;
                 
-                this.sentenceTimers.push(endTimer);
+                // Use browser's real-time boundary events
+                utterance.onboundary = (event) => {
+                    if (!this.isPlaying || !this.highlightCallback) return;
+                    
+                    const charIndex = event.charIndex;
+                    console.log(`Boundary event: character ${charIndex}`);
+                    
+                    // Find which sentence contains this character position
+                    const currentSentence = sentenceMap.find(s => 
+                        charIndex >= s.start && charIndex < s.end
+                    );
+                    
+                    if (currentSentence && currentSentence.index !== currentHighlightedIndex) {
+                        console.log(`Highlighting sentence ${currentSentence.index}: "${currentSentence.sentence}"`);
+                        currentHighlightedIndex = currentSentence.index;
+                        this.highlightCallback(currentSentence.index);
+                    }
+                };
+                
+                // Fallback: highlight first sentence immediately
+                if (this.highlightCallback) {
+                    setTimeout(() => {
+                        if (this.isPlaying && currentHighlightedIndex === -1) {
+                            console.log('Fallback: Highlighting first sentence');
+                            this.highlightCallback(0);
+                            currentHighlightedIndex = 0;
+                        }
+                    }, 100);
+                }
             }
             
             static clearTimers() {
@@ -420,7 +427,6 @@
                     }
                     this.currentUtterance = null;
                     this.isPlaying = false;
-                    this.clearTimers();
                     if (this.highlightCallback) {
                         this.highlightCallback(-1);
                         this.highlightCallback = null;
@@ -2185,7 +2191,7 @@
                                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                                             theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
                                         }`}>
-                                            v{APP_VERSION} 🔊
+                                            v{APP_VERSION} 🎯
                                         </span>
                                         <div className="flex items-center gap-1 text-yellow-500 mt-1">
                                             <Icon name="points" className="w-4 h-4" />
