@@ -1,0 +1,340 @@
+Q1)Explain why MUST there be a safe system of work.(3pt)
+Answer: It is a LEGAL requirement under the HASWA 1974.
+
+Q2)a) State the legislation and the regulation therein that refers to the stability of cranes and b) Which regulation states the requirement for all lifting operations to be properly planned?(2pt)
+Answer: a) LOLER Regulation 4
+b) LOLER Regulation 8
+
+Q3) a) State the regulation number for the lifting of persons under LOLER 1998 and b) List FIVE requirements to be within a procedure.(6pt)
+Answer: a)LOLER Regulation 5
+b) 1. Has suitable devices to prevent the risk of carrier falling
+2. A person trapped in any carrier can be freed
+3. The carrier has an enhanced safety coefficient suspension rope or chain
+4. The rope or chain is inspected by a competent person every working day
+5. The use of carrier clearly marked for personnel use
+
+Q4)a) What is the 'Factor of Safety' when lifting personnel and
+b) What needs to be taken into account with wind speeds?(1pt)
+Answer: a) 2:1
+b) maximum wind speeds of 7m/s
+
+Q5)How does the guidance in LOLER 1998 (L 113) describe the difference between installed and positioned?(4pt)
+Answer: Installed – fixed in location (tower crane)
+Positioned – manoeuvred in to place (mobile crane)
+
+Q6)a) What is the minimum recommended distance that is allowed between the counterweight(s) of any lifting equipment and an object/structure and
+b) What measure must be taken if the distance is less?(4pt)
+Answer: a) Minimum 600 mm.
+b) Prevent access
+
+Q7)Who has overall control of the lifting operation?(1pt)
+Answer: The Appointed Person
+
+Q8)What IS the definition of a competent person as stated by Codes of Practice?(1pt)
+Answer: A person who has practical and theoretical knowledge as well as planning experience of crane and equipment.
+
+Q9)Which part of BS 7121 is specific to mobile cranes?(1pt)
+Answer: Sections 2-3
+
+Q10)When a crane company hires out a crane, name TWO main legal requirements the hire company must meet regarding the crane and operator.(2pt)
+Answer: 1. A competent trained operator
+2. Correct and up-to-date certification
+
+Q11)Explain the difference between an employing and user organisation.(2pt)
+Answer: Employing Organisation requires the load to be lifted 
+User Organisation and plan and manoeuvres the lift for the client.
+
+Q12)Who is responsible for providing the contractor with written details of the work to be done?(1pt)
+Answer: The Employing Organisation
+
+Q13)Where would the information relating to the additional requirements of an intermediate lift over a basic lift be sought?(1pt)
+Answer: Explained in BS 7121, 4.3.2 for basic lift, 4.3.3. for intermediate/standard lift
+
+Q14)To whom should the appointed person give all details involving the lifting
+operation?(1pt)
+Answer: Crane supervisor and anyone involved.
+
+Q15)Why is it recommended to complete a report after the completion of the lifting operation?(2pt)
+Answer: To evaluate the lifting operation where good practice can be utilized in future lifts or where the operation could have been planned more effectively. The client/contractor may further require written feedback on the operation.
+
+Q16)A change of crane lifting equipment operator is required. What must they be made aware of before continuing?(2pt)
+Answer: The lift plan and any other relevant issue.
+
+Q17) Name TWO duties of the crane operator.(2pt)
+Answer: I. Operate crane according to manufactures instructions
+2. Implement the lift plan and safe system of work
+
+Q18)Describe FOUR factors that need to be taken into account when specifying communication procedures for a lifting operation.(4pt)
+Answer: 1. Communication method established before the lift
+2. Banksman/Signaller shall be visible/audible at all times
+3. The operator shall obey stop signals whoever gives them
+4. The Person in Charge shall be clearly identified and made known to all members of the lift team and personnel in the proximity.
+
+Q19)If radios are to be used during the lifting operations, what FIVE actions and checks must be made before use?(5pt)
+Answer: 1. Check if people involved know how to use them
+2. Check if batteries will last for the duration of the operation or spare batteries are supplied
+3. Check if all involved in the lifting are on the same frequency (channel)
+4. Check if the signal strength is sufficient
+5. Check if the frequency is clear from other interferences
+
+Q20)Name the FOUR stages of the hierarchy of control for the marshalling of mobile lifting equipment.(4pt)
+Answer: 1. Elimination/substitution
+2. Engineering
+3. Administration
+4. PPE
+
+Q21)Name THREE factors to be taken into account when devising a mobile lifting equipment marshalling plan.(3pt)
+Answer: 1. Visibility
+2. Attaching / Detaching and securing loads
+3. Environment
+
+Q22)Name THREE possible effects that fatigue can have on a lifting team (3pt)
+Answer: 1. Decreased productivity
+2. Reduced safe working ability
+3. Absenteeism
+
+Q23)Name SIX principle factors should be taken into account in relation to
+fatigue management of a lifting operation.(6pt)
+Answer: 1. Comply with your organization's policies and procedures relating fatigue
+2. Understand your sleep, rest and recovery needs and obtain adequate rest and sleep away from work
+3. Seek medical advice and assistance if you have a concern about a health condition that affects your sleep or causes fatigue
+4. Look out for signs of fatigue at the people you work with
+5. In consultations with your supervisor, take steps to manage fatigue
+6. Maintain hydration
+
+Q24)State THREE occasions on which lifting equipment must be thoroughly examined.(3pt)
+Answer: 1. When lifting equipment is first supplied (used for the first time by the
+employer)
+2. When certain equipment is installed (e.g. tower crane)
+3. Periodically during the lifetime of the equipment
+4. Following exceptional circumstances
+
+Q25)How long is a thorough examination for a lifting accessory valid for?(1pt)
+Answer: 6 months.
+
+Q26)Name FOUR items that must be recorded when a thorough examination on a lifting appliance has been carried out.(4pt)
+Answer: 1. Defects
+2. SWL
+3. Model of the machine
+4. Examination location
+
+Q27)List TWO methods of obtaining the accurate weight of a load.(2pt)
+Answer: 1. Manufacturer's data
+2. Trial lift (using a weight load cell)
+
+Q28)During dismantling operations, what factor of safety is applied to the load?(1pt)
+Answer: Minimum of 20%
+
+Q29)If an object has to be dismantled above ground to be lifted to ground level (and can't be returned to the original position), what factor of safety should be applied?(1pt)
+Answer: 2:1
+
+Q30)Name THREE factors(configurations) that determine the rated lifting capacity of lifting equipment.(3pt)
+Answer: 1. Boom angle
+2. Spread of outriggers
+3. The radius
+
+Q31)What does the term 'structural strength' relate to with regard to the lifting capacity of any lifting equipment?(1pt)
+Answer: Structural strength refers to where the maximum SWL is limited by the structural strength of all relevant components. Example boom, outriggers, slew ring, chassis .
+
+Q32)Name the sections in 7121 where advice is given on 'Lifting without outriggers' and 'Pick and carry'.(1pt)
+Answer: 12.1.5 Lifting without outriggers
+12.1.6 Pick and Carry
+
+Q33)Define the term 'radius'.(1pt)
+Answer: The radius is the horizontal distance between the points at which the centre of rotation meets the ground and the vertical centre line passing through the load lifting attachment.
+
+Q34)If a crane is out of level, what effect will it have on the radius?(2pt)
+Answer: Increase on low side, decrease on high side.
+
+Q35)What is the definition of the term "outreach"?(1pt)
+Answer: The horizontal measurement from the centre of the hook block to the nearest part of the crane (excluding boom).
+
+Q36)If a load of 20 tonnes is lifted on four falls of rope, what is the tension in each fall?(1pt)
+Answer: 20 tonnes / 4 falls = 5 tonnes each fall
+
+Q37)What advantage is gained by increasing the number of falls on a hook block?(1pt)
+Answer: Increasing the falls could increase lifting capacity (for a particular configuration).
+
+Q38)State the safe procedure to be followed before lifting or lowering a load down a shaft or excavation.(2pt)
+Answer: The empty hook must be lowered down to working level and the hoist drum checked for sufficient turns on the drum.
+
+Q39)When planning a lifting operation to place loads below ground level, what needs to be taken into account when calculating the gross weight of the load?(2pt)
+Answer: The weight of the rope below ground level will need to be factored into the gross weight of the load.
+
+Q40)Explain the purpose of the over-hoist limit switch?(1pt)
+Answer: To stop the hook from hitting the boom head.
+
+Q41)What are the types of warning indicated by RCI and at what point are they activated?(2pt)
+Answer: AMBER 90-97.6%
+RED light with external alarm 102.5-110%
+
+Q42)a) Where would the duty board of a tower crane normally be located and
+b) Name FOUR types of information that it must contain (5pt)
+Answer: a) Located at the base of the tower crane
+b)
+1. Make
+2. Model
+3. Serial number
+4. Capacity at maximum radius
+
+Q43)How could the deflection of a boom or jib on a mobile-type crane affect a lift? (2pt)
+Answer: The boom deflection can cause an increase in the radius.
+
+Q44)Why must a lifting equipment operator never try to,' and 'drag' a load? (2pt)
+Answer: Because it can induce side loading on the boom (for which it wasn't designed) and can cause structural failure.
+
+Q45)On mobile and crawler cranes, in what situation can a single load be lifted using the fly jib hook block & min book hook block simultaneously?(1pt)
+Answer: If it is stated by the manufacturer.
+
+Q46)On both tracked and wheeled 360 degree excavators:(2pt)
+a) What differs between lifting over the side of the machine compared to lifting the front or the rear of the machine?
+b) Explain why.
+Answer: a) Increased stability when lifting over the front and back, over the side a reduction of capacity
+b) Reduced stability base
+
+Q47)Name FOUR factors relating to ground that a ground engineer would need to taken into account when determining the load bearing capacity of ground (4pt)
+Answer: 1. Ability of the ground to support the gross weight of the machine and load
+2. Integrity of adjacent ground to withstand lateral stresses imposed
+3. Levelling and preparation
+4. Underground services
+
+Q48)The area of mat size has been correctly specified for use with the outriggers of a mobile crane and the intended load and operating radius but the pad not stiff or rigid enough (e.g. it is too thin). Explain the possible consequence.(2pt)
+Answer: The mat will be unable to spread the outrigger point load uniformly and will risk sinking in and destabilizing the crane.
+
+Q49)Identify FOUR requirements for ensuring the stability of mobile cranes on site.(4pt)
+Answer: 1. Firm/level standing
+2. All outriggers extended accordingly
+3. Crane level both longitudinally and transversely
+4. All wheels clear of the ground
+5. Crane not overloaded
+
+Q50)Outline the role of the Temporary Works Coordinator.(2pt)
+Answer: 1. Co-ordinate all temporary works activities
+2. Ensure a temporary works register is established and maintained
+3. Ensure that responsibilities are accepted
+4. Ensure that a design brief is prepared with the actual situation on site
+
+Q51)Who is responsible for compiling all necessary documentation when lifting close proximity to a site boundary? E.g. protection fans?(1pt)
+Answer: Temp works coordinator
+
+Q52)A platform is being used to receive lifted loads of materials. What primary procedure must be in place to ensure that the platform being used is suitable and sufficient to hold the weight of the load?(1pt)
+Answer: Temporary works design.
+
+Q53)What are the THREE key fundamental aspects that need considering when preparing a design for any temporary works design/structure?(3pt)
+Answer: 1. foundation
+2. structure
+3. stability
+
+Q54)List FOUR items of information that must be included on a temporary works register.(4pt)
+Answer: 1. Design Checker
+2. Date design complete
+3. Date design checked/approved
+4. Erection complete and checked or "Permit to Load", "Permit to Dismantle"
+
+Q55)a) What is the recommended minimum exclusion zone around overhead power lines,(6pt)
+b) Where can this information be sourced and
+c) Explain why a distance from overhead power lines should be kept.
+Answer: a) 	275KW-400KW 7M
+	132KW 6M
+	11KW-33KW 3M
+	Low voltage 1M
+b) BS6 HSE
+c) Because electricity can arch across large gaps
+
+Q56)When planning a lift near a slope, what is the minimum distance to be kept between the supporting components of the lifting equipment and the slope?(2pt)
+Answer: Edge of the mat to the edge of the slope should be double of height of slope.
+
+Q57)If planning to lift loads In or near a pedestrianized area, what main factor needs to be taken into account?(2pt)
+Answer: Physical segregation of pedestrians from overhead loads. Create an exclusion zone.
+
+Q58)Two cranes are working in the same vicinity that encroach the operating radius of each. What actions should the lift plan or method statement normally specify?(3pt)
+Answer: Have crane coordinator in place or anti-collision and crash radios.
+
+Q59)In what circumstances would aviation warning lighting be required to high -type lifting equipment?(2pt)
+Answer: If the lifting equipment is within 6km of an aerodrome and the overall height exceeds 10 metres above nearby existing structures and trees.
+
+Q60)Identify 4 types of infrastructure where a responsible body or owner would have to be notified when planning a lift on or near by.(4pt)
+Answer: 1. Rivers
+2. Airfields
+3. Highways
+4. Railways
+5. Live plant
+
+Q61)Name a design of accessory hook that is exempt from being fitted with a safety catch.(1pt)
+Answer: A 'C' type Hook.
+
+Q62)Name THREE markings found on multiple-leg slings.(3pt)
+Answer: 1. SWL (WLL)
+2. Manufactures name
+3. Serial number
+
+Q63)State the maximum recommended included angle for single-leg slings when used as a pair.(1pt)
+Answer: Maximum 90 degrees.
+
+Q64)Give TWO methods of obtaining the centre of gravity on an unbalanced load.(2pt)
+Answer: 1. Calculation
+2. Trial lift
+
+Q65)In which applications are single leg slings rated with their own SWL (WLL)?(1pt)
+Answer: Only when used vertically.
+
+Q66)How is the SWL/WLL/rated capacity for multi-legs slings determined?(1pt)
+Answer: By the Uniform Load method.
+
+Q67)To lift a load of 20 tonnes on a 4 single leg chain sling, what is the required SWL (WLL) for each leg with an included angle of 87 degrees?(4pt)
+Please explain your calculation.
+Answer: 1. 9.52 tonnes/each leg
+2. When using 4 leg chain sling the same calculation as 3 leg chain sling is used because it is considered that not all 4 legs are taking the weight equal. So: 20 tonnes divided by 2.1 (mod factor for 3 legs and 87 degrees angle) = 9.52 tonne each leg. 4x10 slings needed.
+
+Q68)How should multiple accessories be connected to a crane hook?(1pt)
+Answer: Using a master ring and bow shackles.
+
+Q69)State SIX environmental factors that can affect an external lifting operation.(6pt)
+Answer: 1. wind
+2. Fog
+3. Mist
+4. Excessive rain
+5. Lightning
+6. Storms
+7. Ice and snow
+
+Q70)Name FOUR factors should be taken into account when calculating the effects of wind on a crane-based lifting operation(4pt)
+Answer: 1. The geometry and shape of the load
+2. The height to which the load is to be lifted
+3. The wind direction
+4. Operating between structures
+
+Q71)Give THREE examples of how excessive rain can affect an external lifting operation when using lifting equipment.(3pt)
+Answer: 1. Excessive rain can cause the ground to soften reducing the crane support
+2. Poor visibility
+3. Cause slippery conditions and reduce traction
+
+Q72) Outline THREE principle requirements for out of service procedures for tower cranes.(3pt)
+Answer: 1. Remove accessories and jib in free slew
+2. Out of radius of other cranes and obstructions
+3. Lock up and isolate crane
+
+Q73)Using the given lifting capacity diagram for the JC8 525/125 telescopic handler using a hook (A61):(4pt)
+a) What is the maximum lifting capacity?
+b) What is the maximum lifting capacity when free on wheels (FOW)
+c) What the maximum hook height where a load can be lifted
+d) What is the maximum lifting capacity when the hook is at a height of 8m and the boom at an angle of 4Sdegrees?
+Answer: a) 3500 kg
+ab) 0kg
+ac) 10m
+ad) 1000kg
+
+Q74)What does the helth and safety at work act require employers to do regards spcificaly to plant?(3pt)
+Answer: Provide and maintain plant that is safe and without risk to health so far as is resonably practicable.
+
+Q75) Name two possible penalties for not folowing local requirements. (2pt)
+Answer: fines or imprisonment
+
+Q76) When planning a lift for a lory loader activity and where it is adjacent to a slope, what is regarded as the minimum distance to be kept from a  sloped edge?(2pt)
+Answer: The horizonal distance from the foot to the top of the slope should be at least the distance from the top of the slope to the lory.
+
+Q77) What is the main aim of HASWA 1974 ? (2pt)
+Answer: To create a safe system of work.
+
+Q78) What is a load radious indicator?(1pt)
+Answer: A divice fitted to a crane that shows the radius at witch the crane is operating and is coresponding SWL (WLL)
