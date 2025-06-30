@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1f2937">
-    <title>Flash Cards Pro v6.2</title>
+    <title>Flash Cards Pro v6.3</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -122,8 +122,8 @@
         // CONSTANTS & UTILITIES
         // ========================================
         
-        const APP_VERSION = '6.2';
-        const STORAGE_KEY = 'flashcards-pro-v62';
+        const APP_VERSION = '6.3';
+        const STORAGE_KEY = 'flashcards-pro-v63';
         
         // Spaced Repetition Algorithm
         const calculateNextReview = (easeFactor, interval, quality) => {
@@ -460,7 +460,7 @@
                     if (cards.length > 0) {
                         const importData = {
                             cards,
-                            categories: new Set(['Theory Questions']),
+                            categories: new Set(cards.map(card => card.category).filter(Boolean)),
                             studySessions: [],
                             cardProgress: {},
                         };
@@ -497,10 +497,10 @@
                                 }
                                 
                                 const card = {
-                                    id: questionNumber.toString(),
+                                    id: Date.now().toString() + '_' + questionNumber,
                                     question: currentQuestion.replace(/\(\d+pt\)/, '').trim(),
                                     answer: currentAnswer.trim(),
-                                    category: 'Theory Questions',
+                                    category: 'Imported Questions',
                                     tags: [],
                                     points: Math.max(1, Math.min(6, currentPoints)),
                                     media: [],
@@ -553,10 +553,10 @@
                         }
                         
                         const card = {
-                            id: questionNumber.toString(),
+                            id: Date.now().toString() + '_' + questionNumber,
                             question: currentQuestion.replace(/\(\d+pt\)/, '').trim(),
                             answer: currentAnswer.trim(),
-                            category: 'Theory Questions',
+                            category: 'Imported Questions',
                             tags: [],
                             points: Math.max(1, Math.min(6, currentPoints)),
                             media: [],
@@ -723,34 +723,9 @@
             return 'bg-red-500 text-white';
         };
 
+        // NO DEFAULT QUESTIONS - App starts empty
         const createDefaultCards = () => {
-            const rawData = `
-Q1)Explain why MUST there be a safe system of work.(3pt)
-Answer: It is a LEGAL requirement under the HASWA 1974.
-
-Q2)a) State the legislation and the regulation therein that refers to the stability of cranes and b) Which regulation states the requirement for all lifting operations to be properly planned?(2pt)
-Answer: a) LOLER Regulation 4
-b) LOLER Regulation 8
-
-Q3) a) State the regulation number for the lifting of persons under LOLER 1998 and b) List FIVE requirements to be within a procedure.(6pt)
-Answer: a)LOLER Regulation 5
-b) 1. Has suitable devices to prevent the risk of carrier falling
-2. A person trapped in any carrier can be freed
-3. The carrier has an enhanced safety coefficient suspension rope or chain
-4. The rope or chain is inspected by a competent person every working day
-5. The use of carrier clearly marked for personnel use
-
-Q4)a) What is the 'Factor of Safety' when lifting personnel and
-b) What needs to be taken into account with wind speeds?(1pt)
-Answer: a) 2:1
-b) maximum wind speeds of 7m/s
-
-Q5)How does the guidance in LOLER 1998 (L 113) describe the difference between installed and positioned?(4pt)
-Answer: Installed – fixed in location (tower crane)
-Positioned – manoeuvred in to place (mobile crane)
-            `;
-            
-            return StorageService.parseQAText(rawData);
+            return [];
         };
 
         // Achievement Notification Component
@@ -1204,7 +1179,7 @@ Positioned – manoeuvred in to place (mobile crane)
             );
         });
 
-        // Spaced Repetition Study Mode Component
+        // Spaced Repetition Study Mode Component with Point-Based System
         const SpacedRepetitionStudyMode = memo(({ cards, onComplete }) => {
             const { state: { theme, settings }, updateCardProgress } = useFlashCards();
             const [currentIndex, setCurrentIndex] = useState(0);
@@ -1223,15 +1198,16 @@ Positioned – manoeuvred in to place (mobile crane)
             
             const currentCard = sortedCards[currentIndex];
             
-            const handleDifficultyResponse = useCallback((difficulty) => {
+            const handlePointResponse = useCallback((responsePoints) => {
                 const timeSpent = Date.now() - startTime;
-                const quality = { again: 0, hard: 1, medium: 2, easy: 3 }[difficulty];
+                // Map point response to quality (inverted - higher points = better performance)
+                const quality = responsePoints === 6 ? 3 : responsePoints === 5 ? 2 : responsePoints === 3 ? 1 : 0;
                 
                 const result = {
                     cardId: currentCard.id,
-                    correct: quality >= 2,
+                    correct: quality >= 1,
                     timeSpent,
-                    difficulty
+                    difficulty: responsePoints === 6 ? 'easy' : responsePoints === 5 ? 'medium' : responsePoints === 3 ? 'hard' : 'again'
                 };
                 
                 setResults(prev => [...prev, result]);
@@ -1242,7 +1218,7 @@ Positioned – manoeuvred in to place (mobile crane)
                     setIsFlipped(false);
                 } else {
                     const duration = Math.floor((Date.now() - startTime) / 1000);
-                    const correct = results.filter(r => r.correct).length + (quality >= 2 ? 1 : 0);
+                    const correct = results.filter(r => r.correct).length + (quality >= 1 ? 1 : 0);
                     onComplete({
                         correct,
                         incorrect: results.length + 1 - correct,
@@ -1319,31 +1295,39 @@ Positioned – manoeuvred in to place (mobile crane)
                     
                     {isFlipped && (
                         <div className="px-4 animate-slide-in">
-                            <p className="text-center text-sm mb-4 opacity-70">How well did you know this?</p>
+                            <p className="text-center text-sm mb-4 opacity-70">How well did you know this? Rate your performance:</p>
                             <div className="grid grid-cols-2 gap-3">
                                 <button
-                                    onClick={() => handleDifficultyResponse('again')}
+                                    onClick={() => handlePointResponse(1)}
                                     className="py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 font-medium"
                                 >
-                                    Again (&lt;1m)
+                                    1pt (Didn't know)
                                 </button>
                                 <button
-                                    onClick={() => handleDifficultyResponse('hard')}
+                                    onClick={() => handlePointResponse(2)}
                                     className="py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 font-medium"
                                 >
-                                    Hard (6m)
+                                    2pt (Struggled)
                                 </button>
                                 <button
-                                    onClick={() => handleDifficultyResponse('medium')}
+                                    onClick={() => handlePointResponse(3)}
+                                    className="py-3 bg-yellow-500 text-white rounded-xl hover:bg-yellow-600 font-medium"
+                                >
+                                    3pt (Okay)
+                                </button>
+                                <button
+                                    onClick={() => handlePointResponse(5)}
                                     className="py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
                                 >
-                                    Good (10m)
+                                    5pt (Pretty good)
                                 </button>
+                            </div>
+                            <div className="mt-3">
                                 <button
-                                    onClick={() => handleDifficultyResponse('easy')}
-                                    className="py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 font-medium"
+                                    onClick={() => handlePointResponse(6)}
+                                    className="w-full py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 font-medium"
                                 >
-                                    Easy (4d)
+                                    6pt (Knew it well!)
                                 </button>
                             </div>
                         </div>
@@ -1498,7 +1482,7 @@ Positioned – manoeuvred in to place (mobile crane)
                 }
                 return {
                     cards: saved?.cards || createDefaultCards(),
-                    categories: saved?.categories || new Set(['Theory Questions']),
+                    categories: saved?.categories || new Set(),
                     studySessions: saved?.studySessions || [],
                     cardProgress: saved?.cardProgress || {},
                     theme: saved?.theme || 'dark',
@@ -1658,7 +1642,7 @@ Positioned – manoeuvred in to place (mobile crane)
                 setState(prev => ({
                     ...prev,
                     cards: [],
-                    categories: new Set(['Theory Questions']),
+                    categories: new Set(),
                     studySessions: [],
                     cardProgress: {},
                 }));
@@ -2052,16 +2036,18 @@ Positioned – manoeuvred in to place (mobile crane)
                                         {settings.speechEnabled ? '🔊' : '🔇'} Read Aloud {settings.speechEnabled ? 'ON' : 'OFF'}
                                     </button>
                                 </div>
-                                <div className={`border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                                    <button
-                                        onClick={handleClearAll}
-                                        className={`w-full px-4 py-3 text-left flex items-center gap-3 text-red-500 ${
-                                            theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                        }`}
-                                    >
-                                        🗑️ Clear All Cards
-                                    </button>
-                                </div>
+                                {cards.length > 0 && (
+                                    <div className={`border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                                        <button
+                                            onClick={handleClearAll}
+                                            className={`w-full px-4 py-3 text-left flex items-center gap-3 text-red-500 ${
+                                                theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                                            }`}
+                                        >
+                                            🗑️ Clear All Cards
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -2112,20 +2098,41 @@ Positioned – manoeuvred in to place (mobile crane)
                                 {filteredCards.length === 0 ? (
                                     <div className="text-center py-12">
                                         <Icon name="study" className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                                        <p className="text-lg mb-2">No cards found</p>
+                                        <p className="text-lg mb-2">
+                                            {cards.length === 0 ? 'Welcome to Flash Cards Pro!' : 'No cards found'}
+                                        </p>
                                         <p className="text-gray-500 mb-4">
-                                            {searchQuery || selectedTags.length > 0 || selectedPoints.length > 0
+                                            {cards.length === 0 
+                                                ? 'Start by creating a card or importing a question set'
+                                                : searchQuery || selectedTags.length > 0 || selectedPoints.length > 0
                                                 ? 'Try adjusting your search filters'
                                                 : 'Create your first card to get started!'
                                             }
                                         </p>
-                                        {!searchQuery && selectedTags.length === 0 && selectedPoints.length === 0 && (
-                                            <button
-                                                onClick={() => setShowCardEditor(true)}
-                                                className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
-                                            >
-                                                Create Card
-                                            </button>
+                                        {cards.length === 0 ? (
+                                            <div className="space-y-3">
+                                                <button
+                                                    onClick={() => setShowCardEditor(true)}
+                                                    className="block w-full py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
+                                                >
+                                                    ➕ Create Your First Card
+                                                </button>
+                                                <button
+                                                    onClick={handleImport}
+                                                    className="block w-full py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 font-medium"
+                                                >
+                                                    📥 Import Question Set
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            !searchQuery && selectedTags.length === 0 && selectedPoints.length === 0 && (
+                                                <button
+                                                    onClick={() => setShowCardEditor(true)}
+                                                    className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
+                                                >
+                                                    Create Card
+                                                </button>
+                                            )
                                         )}
                                     </div>
                                 ) : (
@@ -2148,84 +2155,108 @@ Positioned – manoeuvred in to place (mobile crane)
                             <div className="space-y-6">
                                 <h2 className="text-2xl font-bold text-center mb-6">Ready to Study? 📚</h2>
                                 
-                                {settings.spacedRepetitionEnabled && dueCards.length > 0 && (
-                                    <div className={`p-6 rounded-xl ${
-                                        theme === 'dark' ? 'bg-gradient-to-r from-purple-900 to-purple-800' : 'bg-gradient-to-r from-purple-100 to-purple-200'
-                                    } text-center border-2 border-purple-500`}>
-                                        <Icon name="brain" className="w-12 h-12 mx-auto mb-4 text-purple-500" />
-                                        <h3 className="text-lg font-semibold mb-2">🧠 Smart Review</h3>
-                                        <p className={`text-sm mb-4 ${
-                                            theme === 'dark' ? 'text-purple-200' : 'text-purple-700'
-                                        }`}>
-                                            {dueCards.length} cards are due for review using spaced repetition
-                                        </p>
-                                        
-                                        <button
-                                            onClick={() => {
-                                                setStudyCards(dueCards);
-                                                setStudyMode('spaced-repetition');
-                                                setIsStudying(true);
-                                            }}
-                                            className="w-full py-4 bg-purple-500 text-white rounded-xl hover:bg-purple-600 text-lg font-medium"
-                                        >
-                                            Start Smart Review ({dueCards.length} cards)
-                                        </button>
+                                {cards.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <Icon name="study" className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                                        <p className="text-lg mb-2">No cards to study</p>
+                                        <p className="text-gray-500 mb-4">Import some questions or create cards first!</p>
+                                        <div className="space-y-3">
+                                            <button
+                                                onClick={handleImport}
+                                                className="block w-full py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 font-medium"
+                                            >
+                                                📥 Import Question Set
+                                            </button>
+                                            <button
+                                                onClick={() => setShowCardEditor(true)}
+                                                className="block w-full py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
+                                            >
+                                                ➕ Create Your First Card
+                                            </button>
+                                        </div>
                                     </div>
-                                )}
-                                
-                                <div className={`p-6 rounded-xl ${
-                                    theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                                } text-center`}>
-                                    <Icon name="study" className="w-12 h-12 mx-auto mb-4 text-blue-500" />
-                                    <h3 className="text-lg font-semibold mb-2">Study Session</h3>
-                                    <p className={`text-sm mb-4 ${
-                                        theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                                    }`}>
-                                        Choose how you want to study your {filteredCards.length} flashcards
-                                    </p>
-                                    
-                                    <div className="space-y-3">
-                                        <button
-                                            onClick={() => setShowPointsSelection(true)}
-                                            disabled={filteredCards.length === 0}
-                                            className="w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
-                                        >
-                                            Study by Points
-                                        </button>
-                                        
-                                        <button
-                                            onClick={() => {
-                                                setStudyCards(filteredCards);
-                                                setStudyMode('standard');
-                                                setIsStudying(true);
-                                            }}
-                                            disabled={filteredCards.length === 0}
-                                            className="w-full py-4 bg-green-500 text-white rounded-xl hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
-                                        >
-                                            Study All ({filteredCards.length} cards)
-                                        </button>
-                                    </div>
-                                </div>
-                                
-                                <div className={`grid grid-cols-3 gap-3 ${
-                                    theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                                }`}>
-                                    {[1, 2, 3, 4, 5, 6].map(pt => {
-                                        const count = cards.filter(c => (c.points || 1) === pt).length;
-                                        if (count === 0) return null;
-                                        return (
-                                            <div key={pt} className={`p-3 rounded-lg text-center ${
-                                                theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
-                                            }`}>
-                                                <div className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1 mb-1 ${getPointsColor(pt)}`}>
-                                                    <Icon name="points" className="w-3 h-3" />
-                                                    {pt}pt
-                                                </div>
-                                                <div className="text-sm font-medium">{count} cards</div>
+                                ) : (
+                                    <>
+                                        {settings.spacedRepetitionEnabled && dueCards.length > 0 && (
+                                            <div className={`p-6 rounded-xl ${
+                                                theme === 'dark' ? 'bg-gradient-to-r from-purple-900 to-purple-800' : 'bg-gradient-to-r from-purple-100 to-purple-200'
+                                            } text-center border-2 border-purple-500`}>
+                                                <Icon name="brain" className="w-12 h-12 mx-auto mb-4 text-purple-500" />
+                                                <h3 className="text-lg font-semibold mb-2">🧠 Smart Review</h3>
+                                                <p className={`text-sm mb-4 ${
+                                                    theme === 'dark' ? 'text-purple-200' : 'text-purple-700'
+                                                }`}>
+                                                    {dueCards.length} cards are due for review using spaced repetition
+                                                </p>
+                                                
+                                                <button
+                                                    onClick={() => {
+                                                        setStudyCards(dueCards);
+                                                        setStudyMode('spaced-repetition');
+                                                        setIsStudying(true);
+                                                    }}
+                                                    className="w-full py-4 bg-purple-500 text-white rounded-xl hover:bg-purple-600 text-lg font-medium"
+                                                >
+                                                    Start Smart Review ({dueCards.length} cards)
+                                                </button>
                                             </div>
-                                        );
-                                    }).filter(Boolean)}
-                                </div>
+                                        )}
+                                        
+                                        <div className={`p-6 rounded-xl ${
+                                            theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+                                        } text-center`}>
+                                            <Icon name="study" className="w-12 h-12 mx-auto mb-4 text-blue-500" />
+                                            <h3 className="text-lg font-semibold mb-2">Study Session</h3>
+                                            <p className={`text-sm mb-4 ${
+                                                theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                                            }`}>
+                                                Choose how you want to study your {filteredCards.length} flashcards
+                                            </p>
+                                            
+                                            <div className="space-y-3">
+                                                <button
+                                                    onClick={() => setShowPointsSelection(true)}
+                                                    disabled={filteredCards.length === 0}
+                                                    className="w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
+                                                >
+                                                    Study by Points
+                                                </button>
+                                                
+                                                <button
+                                                    onClick={() => {
+                                                        setStudyCards(filteredCards);
+                                                        setStudyMode('standard');
+                                                        setIsStudying(true);
+                                                    }}
+                                                    disabled={filteredCards.length === 0}
+                                                    className="w-full py-4 bg-green-500 text-white rounded-xl hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
+                                                >
+                                                    Study All ({filteredCards.length} cards)
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className={`grid grid-cols-3 gap-3 ${
+                                            theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                                        }`}>
+                                            {[1, 2, 3, 4, 5, 6].map(pt => {
+                                                const count = cards.filter(c => (c.points || 1) === pt).length;
+                                                if (count === 0) return null;
+                                                return (
+                                                    <div key={pt} className={`p-3 rounded-lg text-center ${
+                                                        theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
+                                                    }`}>
+                                                        <div className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1 mb-1 ${getPointsColor(pt)}`}>
+                                                            <Icon name="points" className="w-3 h-3" />
+                                                            {pt}pt
+                                                        </div>
+                                                        <div className="text-sm font-medium">{count} cards</div>
+                                                    </div>
+                                                );
+                                            }).filter(Boolean)}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
                         
