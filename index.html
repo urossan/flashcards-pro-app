@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1f2937">
     <title>Flash Cards Pro v6.2</title>
-    <link rel="manifest" href="manifest.json">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -39,7 +38,6 @@
         }
         button:active { transform: scale(0.98); }
         
-        /* Enhanced Animation Keyframes */
         @keyframes fadeInUp {
             from {
                 opacity: 0;
@@ -48,15 +46,6 @@
             to {
                 opacity: 1;
                 transform: translateY(0) translateX(-50%);
-            }
-        }
-        
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 0.9;
-            }
-            50% {
-                opacity: 0.7;
             }
         }
         
@@ -108,7 +97,6 @@
             input, textarea, select { font-size: 16px !important; } 
         }
         
-        /* Custom scrollbar */
         ::-webkit-scrollbar {
             width: 6px;
         }
@@ -127,97 +115,8 @@
 <body>
     <div id="root"></div>
     
-    <script type="text/babel" data-type="typescript">
+    <script type="text/babel">
         const { useState, useEffect, useMemo, useCallback, createContext, useContext, useRef, memo } = React;
-
-        // ========================================
-        // TYPESCRIPT INTERFACES & TYPES
-        // ========================================
-        
-        interface Card {
-            id: string;
-            question: string;
-            answer: string;
-            category: string;
-            tags: string[];
-            points: number;
-            media: string[];
-            created: string;
-            lastStudied: string | null;
-            nextReview: string | null;
-            timesStudied: number;
-            timesCorrect: number;
-            easeFactor: number;
-            interval: number;
-            repetitions: number;
-            lapses: number;
-            streak: number;
-        }
-        
-        interface StudySession {
-            id: string;
-            date: string;
-            duration: number;
-            cardsStudied: number;
-            correctCount: number;
-            incorrectCount: number;
-            mode: 'standard' | 'spaced-repetition' | 'review';
-            pointsEarned: number;
-            streakBonus: number;
-        }
-        
-        interface Settings {
-            dailyGoal: number;
-            notificationsEnabled: boolean;
-            soundEnabled: boolean;
-            autoAdvance: boolean;
-            studyReminders: string[];
-            speechEnabled: boolean;
-            speechRate: number;
-            speechVoice: string;
-            autoReadQuestion: boolean;
-            autoReadAnswer: boolean;
-            spacedRepetitionEnabled: boolean;
-            showAnswerFirst: boolean;
-            fuzzySearchEnabled: boolean;
-        }
-        
-        interface AppState {
-            cards: Card[];
-            categories: Set<string>;
-            studySessions: StudySession[];
-            cardProgress: Record<string, any>;
-            theme: 'light' | 'dark';
-            settings: Settings;
-            currentStreak: number;
-            longestStreak: number;
-            totalPointsEarned: number;
-            achievements: Achievement[];
-            lastStudyDate: string | null;
-        }
-        
-        interface Achievement {
-            id: string;
-            title: string;
-            description: string;
-            icon: string;
-            unlockedAt: string;
-            category: 'study' | 'streak' | 'points' | 'mastery';
-        }
-        
-        interface StudyResult {
-            cardId: string;
-            correct: boolean;
-            timeSpent: number;
-            difficulty: 'easy' | 'medium' | 'hard' | 'again';
-        }
-        
-        interface AnalyticsData {
-            dailyStudy: { date: string; cards: number; points: number; accuracy: number }[];
-            weeklyProgress: { week: string; improvement: number }[];
-            categoryPerformance: { category: string; accuracy: number; totalCards: number }[];
-            difficultyBreakdown: { points: number; mastered: number; learning: number; new: number }[];
-        }
 
         // ========================================
         // CONSTANTS & UTILITIES
@@ -226,9 +125,8 @@
         const APP_VERSION = '6.2';
         const STORAGE_KEY = 'flashcards-pro-v62';
         
-        // Spaced Repetition Algorithm (SuperMemo-like)
-        const calculateNextReview = (easeFactor: number, interval: number, quality: number): { newInterval: number; newEaseFactor: number } => {
-            // Quality: 0=again, 1=hard, 2=medium, 3=easy
+        // Spaced Repetition Algorithm
+        const calculateNextReview = (easeFactor, interval, quality) => {
             let newEaseFactor = easeFactor;
             let newInterval = interval;
             
@@ -254,24 +152,22 @@
         };
         
         // Fuzzy search implementation
-        const fuzzyMatch = (text: string, pattern: string, threshold: number = 0.6): boolean => {
+        const fuzzyMatch = (text, pattern, threshold = 0.6) => {
             if (!pattern) return true;
             
             const textLower = text.toLowerCase();
             const patternLower = pattern.toLowerCase();
             
-            // Exact match
             if (textLower.includes(patternLower)) return true;
             
-            // Fuzzy matching using Levenshtein distance
             const distance = levenshteinDistance(textLower, patternLower);
             const similarity = 1 - distance / Math.max(textLower.length, patternLower.length);
             
             return similarity >= threshold;
         };
         
-        const levenshteinDistance = (str1: string, str2: string): number => {
-            const matrix: number[][] = [];
+        const levenshteinDistance = (str1, str2) => {
+            const matrix = [];
             
             for (let i = 0; i <= str2.length; i++) {
                 matrix[i] = [i];
@@ -299,7 +195,7 @@
         };
         
         // Achievement definitions
-        const ACHIEVEMENTS: Omit<Achievement, 'unlockedAt'>[] = [
+        const ACHIEVEMENTS = [
             { id: 'first_study', title: 'Getting Started', description: 'Complete your first study session', icon: '🎯', category: 'study' },
             { id: 'streak_7', title: 'Week Warrior', description: 'Study for 7 days in a row', icon: '🔥', category: 'streak' },
             { id: 'streak_30', title: 'Month Master', description: 'Study for 30 days in a row', icon: '👑', category: 'streak' },
@@ -311,15 +207,15 @@
         ];
         
         // Validation helpers
-        const validateCard = (card: Partial<Card>): card is Card => {
+        const validateCard = (card) => {
             if (!card || typeof card !== 'object') return false;
             if (!card.question || typeof card.question !== 'string' || !card.question.trim()) return false;
             if (!card.answer || typeof card.answer !== 'string' || !card.answer.trim()) return false;
             return true;
         };
         
-        const validateSettings = (settings: Partial<Settings>): Settings => {
-            const defaults: Settings = {
+        const validateSettings = (settings) => {
+            const defaults = {
                 dailyGoal: 20,
                 notificationsEnabled: false,
                 soundEnabled: true,
@@ -338,16 +234,15 @@
         };
 
         // ========================================
-        // ENHANCED SERVICES
+        // SERVICES
         // ========================================
 
-        // Enhanced Text-to-Speech Service
         class SpeechService {
-            static currentUtterance: SpeechSynthesisUtterance | null = null;
-            static isPlaying: boolean = false;
-            static isSupported: boolean = typeof window !== 'undefined' && 'speechSynthesis' in window;
+            static currentUtterance = null;
+            static isPlaying = false;
+            static isSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
             
-            static speak(text: string, settings: Settings = {} as Settings): void {
+            static speak(text, settings = {}) {
                 if (!this.isSupported || !settings.speechEnabled || !text?.trim()) return;
                 
                 try {
@@ -387,7 +282,7 @@
                 }
             }
             
-            static stop(): void {
+            static stop() {
                 if (this.isSupported && window.speechSynthesis) {
                     try {
                         window.speechSynthesis.cancel();
@@ -399,7 +294,7 @@
                 }
             }
             
-            static getAvailableVoices(): SpeechSynthesisVoice[] {
+            static getAvailableVoices() {
                 if (!this.isSupported) return [];
                 try {
                     return window.speechSynthesis.getVoices();
@@ -410,12 +305,11 @@
             }
         }
 
-        // Enhanced Storage Service with Analytics
         class StorageService {
             static STORAGE_KEY = STORAGE_KEY;
             static VERSION = APP_VERSION;
             
-            static save(state: AppState): void {
+            static save(state) {
                 try {
                     const data = { 
                         ...state, 
@@ -425,17 +319,13 @@
                     };
                     
                     const serialized = JSON.stringify(data);
-                    if (serialized.length > 5 * 1024 * 1024) {
-                        console.warn('Data size is large, consider cleaning up old sessions');
-                    }
-                    
                     localStorage.setItem(this.STORAGE_KEY, serialized);
                 } catch (error) {
                     console.error('Failed to save data:', error);
                 }
             }
             
-            static load(): AppState | null {
+            static load() {
                 try {
                     const data = localStorage.getItem(this.STORAGE_KEY);
                     if (!data) return null;
@@ -462,12 +352,11 @@
                 }
             }
             
-            static generateAnalytics(state: AppState): AnalyticsData {
+            static generateAnalytics(state) {
                 const { studySessions, cards } = state;
                 const now = new Date();
                 const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
                 
-                // Daily study data
                 const dailyStudy = studySessions
                     .filter(session => new Date(session.date) >= thirtyDaysAgo)
                     .reduce((acc, session) => {
@@ -475,21 +364,20 @@
                         const existing = acc.find(d => d.date === date);
                         if (existing) {
                             existing.cards += session.cardsStudied;
-                            existing.points += session.pointsEarned;
+                            existing.points += session.pointsEarned || 0;
                             existing.accuracy = (existing.accuracy + (session.correctCount / session.cardsStudied)) / 2;
                         } else {
                             acc.push({
                                 date,
                                 cards: session.cardsStudied,
-                                points: session.pointsEarned,
+                                points: session.pointsEarned || 0,
                                 accuracy: session.correctCount / session.cardsStudied
                             });
                         }
                         return acc;
-                    }, [] as AnalyticsData['dailyStudy'])
+                    }, [])
                     .sort((a, b) => a.date.localeCompare(b.date));
                 
-                // Category performance
                 const categoryPerformance = Array.from(new Set(cards.map(c => c.category)))
                     .map(category => {
                         const categoryCards = cards.filter(c => c.category === category);
@@ -503,7 +391,6 @@
                         };
                     });
                 
-                // Difficulty breakdown
                 const difficultyBreakdown = [1, 2, 3, 4, 5, 6].map(points => {
                     const pointCards = cards.filter(c => c.points === points);
                     return {
@@ -516,13 +403,13 @@
                 
                 return {
                     dailyStudy,
-                    weeklyProgress: [], // Calculated separately
+                    weeklyProgress: [],
                     categoryPerformance,
                     difficultyBreakdown
                 };
             }
             
-            static exportData(state: AppState): void {
+            static exportData(state) {
                 try {
                     const data = {
                         version: this.VERSION,
@@ -546,7 +433,7 @@
                 }
             }
             
-            static async importData(file: File, onSuccess: (data: any) => void, onError: (error: string) => void): Promise<void> {
+            static async importData(file, onSuccess, onError) {
                 try {
                     if (!file) {
                         throw new Error('No file provided');
@@ -583,14 +470,14 @@
                     }
                 } catch (error) {
                     console.error('Import error:', error);
-                    onError((error as Error).message || 'Failed to import file');
+                    onError(error.message || 'Failed to import file');
                 }
             }
             
-            static parseQAText(text: string): Card[] {
+            static parseQAText(text) {
                 if (!text || typeof text !== 'string') return [];
                 
-                const cards: Card[] = [];
+                const cards = [];
                 const lines = text.split('\n');
                 let currentQuestion = '';
                 let currentAnswer = '';
@@ -609,7 +496,7 @@
                                     currentPoints = parseInt(fullQuestionPoints[1]);
                                 }
                                 
-                                const card: Card = {
+                                const card = {
                                     id: questionNumber.toString(),
                                     question: currentQuestion.replace(/\(\d+pt\)/, '').trim(),
                                     answer: currentAnswer.trim(),
@@ -665,7 +552,7 @@
                             currentPoints = parseInt(fullQuestionPoints[1]);
                         }
                         
-                        const card: Card = {
+                        const card = {
                             id: questionNumber.toString(),
                             question: currentQuestion.replace(/\(\d+pt\)/, '').trim(),
                             answer: currentAnswer.trim(),
@@ -697,10 +584,9 @@
             }
         }
 
-        // Achievement Service
         class AchievementService {
-            static checkAchievements(state: AppState, newSession?: StudySession): Achievement[] {
-                const newAchievements: Achievement[] = [];
+            static checkAchievements(state, newSession) {
+                const newAchievements = [];
                 const unlockedIds = new Set(state.achievements.map(a => a.id));
                 
                 ACHIEVEMENTS.forEach(achievement => {
@@ -749,11 +635,11 @@
         }
 
         // ========================================
-        // COMPONENTS - ICONS & UI ELEMENTS
+        // COMPONENTS
         // ========================================
         
-        const Icon = memo(({ name, className = "w-5 h-5" }: { name: string; className?: string }) => {
-            const icons: Record<string, string> = {
+        const Icon = memo(({ name, className = "w-5 h-5" }) => {
+            const icons = {
                 search: "🔍", plus: "➕", moon: "🌙", sun: "☀️", menu: "☰",
                 cards: "🎴", study: "📚", stats: "📊", edit: "✏️", delete: "🗑️",
                 check: "✅", x: "❌", clock: "⏰", volume: "🔊", brain: "🧠",
@@ -767,21 +653,18 @@
             }, icons[name] || "📝");
         });
 
-        // ========================================
-        // ERROR BOUNDARY COMPONENT
-        // ========================================
-        
+        // Error Boundary
         class ErrorBoundary extends React.Component {
-            constructor(props: any) {
+            constructor(props) {
                 super(props);
                 this.state = { hasError: false, error: null, errorInfo: null };
             }
             
-            static getDerivedStateFromError(error: Error) {
+            static getDerivedStateFromError(error) {
                 return { hasError: true };
             }
             
-            componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+            componentDidCatch(error, errorInfo) {
                 console.error('Flash Cards Pro Error:', error, errorInfo);
                 this.setState({
                     error: error,
@@ -790,7 +673,7 @@
             }
             
             render() {
-                if ((this.state as any).hasError) {
+                if (this.state.hasError) {
                     return (
                         <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
                             <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-xl p-6 text-center">
@@ -807,51 +690,40 @@
                                 >
                                     Refresh Page
                                 </button>
+                                <details className="mt-4 text-left">
+                                    <summary className="text-sm text-gray-500 cursor-pointer">
+                                        Technical Details
+                                    </summary>
+                                    <pre className="text-xs mt-2 text-red-600 overflow-auto">
+                                        {this.state.error && this.state.error.toString()}
+                                    </pre>
+                                </details>
                             </div>
                         </div>
                     );
                 }
                 
-                return (this.props as any).children;
+                return this.props.children;
             }
         }
 
-        // ========================================
-        // CONTEXT & HOOKS
-        // ========================================
-        
-        const FlashCardsContext = createContext<{
-            state: AppState;
-            addCard: (card: Omit<Card, 'id' | 'created' | 'lastStudied' | 'nextReview' | 'timesStudied' | 'timesCorrect' | 'easeFactor' | 'interval' | 'repetitions' | 'lapses' | 'streak'>) => void;
-            updateCard: (id: string, updates: Partial<Card>) => void;
-            deleteCard: (id: string) => void;
-            addStudySession: (session: Omit<StudySession, 'id'>) => void;
-            toggleTheme: () => void;
-            importData: (data: any) => void;
-            clearAllCards: () => void;
-            toggleSpeech: () => void;
-            updateCardProgress: (cardId: string, result: StudyResult) => void;
-            getAnalytics: () => AnalyticsData;
-        } | null>(null);
-        
+        // Context
+        const FlashCardsContext = createContext(null);
         const useFlashCards = () => {
             const context = useContext(FlashCardsContext);
             if (!context) throw new Error('useFlashCards must be used within FlashCardsProvider');
             return context;
         };
 
-        // ========================================
-        // UTILITY FUNCTIONS
-        // ========================================
-
-        const getPointsColor = (points: number): string => {
+        // Utility functions
+        const getPointsColor = (points) => {
             const pointsNum = Number(points) || 1;
             if (pointsNum <= 2) return 'bg-green-500 text-white';
             if (pointsNum <= 4) return 'bg-yellow-500 text-white';
             return 'bg-red-500 text-white';
         };
 
-        const createDefaultCards = (): Card[] => {
+        const createDefaultCards = () => {
             const rawData = `
 Q1)Explain why MUST there be a safe system of work.(3pt)
 Answer: It is a LEGAL requirement under the HASWA 1974.
@@ -881,12 +753,8 @@ Positioned – manoeuvred in to place (mobile crane)
             return StorageService.parseQAText(rawData);
         };
 
-        // ========================================
-        // ENHANCED COMPONENTS
-        // ========================================
-
         // Achievement Notification Component
-        const AchievementNotification = memo(({ achievement, onClose }: { achievement: Achievement; onClose: () => void }) => {
+        const AchievementNotification = memo(({ achievement, onClose }) => {
             const { state: { theme } } = useFlashCards();
             
             useEffect(() => {
@@ -915,17 +783,16 @@ Positioned – manoeuvred in to place (mobile crane)
             );
         });
 
-        // Enhanced Analytics Dashboard
-        const AnalyticsDashboard = memo(({ analytics }: { analytics: AnalyticsData }) => {
+        // Analytics Dashboard
+        const AnalyticsDashboard = memo(({ analytics }) => {
             const { state: { theme } } = useFlashCards();
             
             return (
                 <div className="space-y-6">
                     <h2 className="text-2xl font-bold text-center mb-6">📊 Analytics Dashboard</h2>
                     
-                    {/* Daily Study Chart */}
                     <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
-                        <h3 className="font-semibold mb-3">Daily Study Progress (Last 30 Days)</h3>
+                        <h3 className="font-semibold mb-3">Daily Study Progress (Last 14 Days)</h3>
                         <div className="h-32 flex items-end gap-1 overflow-x-auto">
                             {analytics.dailyStudy.slice(-14).map((day, index) => (
                                 <div key={day.date} className="flex flex-col items-center min-w-8">
@@ -942,7 +809,6 @@ Positioned – manoeuvred in to place (mobile crane)
                         </div>
                     </div>
                     
-                    {/* Category Performance */}
                     <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
                         <h3 className="font-semibold mb-3">Category Performance</h3>
                         <div className="space-y-2">
@@ -965,7 +831,6 @@ Positioned – manoeuvred in to place (mobile crane)
                         </div>
                     </div>
                     
-                    {/* Difficulty Breakdown */}
                     <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
                         <h3 className="font-semibold mb-3">Learning Progress by Difficulty</h3>
                         <div className="grid grid-cols-2 gap-3">
@@ -997,22 +862,8 @@ Positioned – manoeuvred in to place (mobile crane)
             );
         });
 
-        // Enhanced Search with Fuzzy Matching
-        const EnhancedSearch = memo(({ 
-            searchQuery, 
-            onSearchChange, 
-            selectedTags,
-            onTagToggle,
-            availableTags,
-            fuzzyEnabled 
-        }: {
-            searchQuery: string;
-            onSearchChange: (query: string) => void;
-            selectedTags: string[];
-            onTagToggle: (tag: string) => void;
-            availableTags: string[];
-            fuzzyEnabled: boolean;
-        }) => {
+        // Enhanced Search Component
+        const EnhancedSearch = memo(({ searchQuery, onSearchChange, selectedTags, onTagToggle, availableTags, fuzzyEnabled }) => {
             const { state: { theme } } = useFlashCards();
             
             return (
@@ -1060,168 +911,8 @@ Positioned – manoeuvred in to place (mobile crane)
             );
         });
 
-        // Spaced Repetition Study Mode
-        const SpacedRepetitionStudyMode = memo(({ cards, onComplete }: { cards: Card[]; onComplete: (results: any) => void }) => {
-            const { state: { theme, settings }, updateCardProgress } = useFlashCards();
-            const [currentIndex, setCurrentIndex] = useState(0);
-            const [isFlipped, setIsFlipped] = useState(false);
-            const [startTime] = useState(Date.now());
-            const [results, setResults] = useState<StudyResult[]>([]);
-            
-            // Sort cards by priority (due for review first)
-            const sortedCards = useMemo(() => {
-                const now = new Date();
-                return [...cards].sort((a, b) => {
-                    const aReview = a.nextReview ? new Date(a.nextReview) : now;
-                    const bReview = b.nextReview ? new Date(b.nextReview) : now;
-                    return aReview.getTime() - bReview.getTime();
-                });
-            }, [cards]);
-            
-            const currentCard = sortedCards[currentIndex];
-            
-            const handleDifficultyResponse = useCallback((difficulty: 'again' | 'hard' | 'medium' | 'easy') => {
-                const timeSpent = Date.now() - startTime;
-                const quality = { again: 0, hard: 1, medium: 2, easy: 3 }[difficulty];
-                
-                const result: StudyResult = {
-                    cardId: currentCard.id,
-                    correct: quality >= 2,
-                    timeSpent,
-                    difficulty
-                };
-                
-                setResults(prev => [...prev, result]);
-                updateCardProgress(currentCard.id, result);
-                
-                if (currentIndex < sortedCards.length - 1) {
-                    setCurrentIndex(currentIndex + 1);
-                    setIsFlipped(false);
-                } else {
-                    // Session complete
-                    const duration = Math.floor((Date.now() - startTime) / 1000);
-                    const correct = results.filter(r => r.correct).length + (quality >= 2 ? 1 : 0);
-                    onComplete({
-                        correct,
-                        incorrect: results.length + 1 - correct,
-                        duration,
-                        mode: 'spaced-repetition'
-                    });
-                }
-            }, [currentCard, currentIndex, sortedCards.length, results, updateCardProgress, startTime, onComplete]);
-            
-            if (!currentCard) {
-                return (
-                    <div className="text-center py-12">
-                        <Icon name="check" className="w-16 h-16 mx-auto mb-4 text-green-500" />
-                        <h2 className="text-xl font-bold mb-2">All caught up!</h2>
-                        <p className="text-gray-500">No cards due for review right now.</p>
-                    </div>
-                );
-            }
-            
-            const cleanQuestion = currentCard.question.replace(/^Q\d+\)\s*/, '');
-            
-            return (
-                <div className="space-y-4">
-                    {/* Progress */}
-                    <div className="p-4 rounded-xl">
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="text-sm font-medium">
-                                Card {currentIndex + 1} of {sortedCards.length}
-                            </span>
-                            <span className="text-xs text-blue-500">Spaced Repetition</span>
-                        </div>
-                        <div className={`h-2 rounded-full overflow-hidden ${
-                            theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
-                        }`}>
-                            <div
-                                className="h-full bg-blue-500 transition-all duration-500"
-                                style={{ width: `${((currentIndex + 1) / sortedCards.length) * 100}%` }}
-                            />
-                        </div>
-                    </div>
-                    
-                    {/* Card */}
-                    <div className="px-4">
-                        <div 
-                            className={`relative w-full h-96 perspective-1000 cursor-pointer`}
-                            onClick={() => setIsFlipped(!isFlipped)}
-                        >
-                            <div className={`relative w-full h-full transition-transform duration-500 transform-style-preserve-3d ${
-                                isFlipped ? 'rotate-y-180' : ''
-                            }`}>
-                                {/* Question */}
-                                <div className={`absolute inset-0 backface-hidden rounded-2xl p-8 flex flex-col justify-center ${
-                                    theme === 'dark' 
-                                        ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
-                                        : 'bg-gradient-to-br from-white to-gray-100'
-                                } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                                    <div className="text-center">
-                                        <h2 className="text-lg font-medium leading-relaxed">{cleanQuestion}</h2>
-                                    </div>
-                                    <div className="text-center text-sm opacity-70 mt-6">
-                                        Tap to reveal answer
-                                    </div>
-                                </div>
-                                
-                                {/* Answer */}
-                                <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-2xl p-8 flex flex-col justify-center ${
-                                    theme === 'dark' 
-                                        ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
-                                        : 'bg-gradient-to-br from-blue-50 to-blue-100'
-                                } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                                    <div className="text-center">
-                                        <h2 className="text-lg font-medium leading-relaxed whitespace-pre-line">{currentCard.answer}</h2>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    {/* Difficulty Buttons */}
-                    {isFlipped && (
-                        <div className="px-4 animate-slide-in">
-                            <p className="text-center text-sm mb-4 opacity-70">How well did you know this?</p>
-                            <div className="grid grid-cols-2 gap-3">
-                                <button
-                                    onClick={() => handleDifficultyResponse('again')}
-                                    className="py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 font-medium"
-                                >
-                                    Again (&lt;1m)
-                                </button>
-                                <button
-                                    onClick={() => handleDifficultyResponse('hard')}
-                                    className="py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 font-medium"
-                                >
-                                    Hard (6m)
-                                </button>
-                                <button
-                                    onClick={() => handleDifficultyResponse('medium')}
-                                    className="py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
-                                >
-                                    Good (10m)
-                                </button>
-                                <button
-                                    onClick={() => handleDifficultyResponse('easy')}
-                                    className="py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 font-medium"
-                                >
-                                    Easy (4d)
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        });
-
-        // Enhanced Mobile Card Item with Tags
-        const MobileCardItem = memo(({ card, onEdit, onDelete, onStudy }: {
-            card: Card;
-            onEdit: () => void;
-            onDelete: () => void;
-            onStudy: () => void;
-        }) => {
+        // Card Item Component
+        const MobileCardItem = memo(({ card, onEdit, onDelete, onStudy }) => {
             const { state: { theme } } = useFlashCards();
             const [showActions, setShowActions] = useState(false);
             
@@ -1229,22 +920,21 @@ Positioned – manoeuvred in to place (mobile crane)
                 setShowActions(!showActions);
             }, [showActions]);
             
-            const handleEdit = useCallback((e: React.MouseEvent) => {
+            const handleEdit = useCallback((e) => {
                 e.stopPropagation();
                 onEdit();
             }, [onEdit]);
             
-            const handleDelete = useCallback((e: React.MouseEvent) => {
+            const handleDelete = useCallback((e) => {
                 e.stopPropagation();
                 onDelete();
             }, [onDelete]);
             
-            const handleStudy = useCallback((e: React.MouseEvent) => {
+            const handleStudy = useCallback((e) => {
                 e.stopPropagation();
                 onStudy();
             }, [onStudy]);
             
-            // Card mastery indicator
             const getMasteryColor = () => {
                 if (card.timesStudied === 0) return 'bg-gray-500';
                 if (card.easeFactor > 2.3 && card.timesStudied >= 3) return 'bg-green-500';
@@ -1260,7 +950,6 @@ Positioned – manoeuvred in to place (mobile crane)
                         <div className="flex justify-between items-start mb-2">
                             <h4 className="font-medium text-base leading-tight pr-2 flex-1">{card.question}</h4>
                             <div className="flex items-center gap-2 flex-shrink-0">
-                                {/* Mastery indicator */}
                                 <div 
                                     className={`w-2 h-2 rounded-full ${getMasteryColor()}`}
                                     title={`Studied ${card.timesStudied} times, ${Math.round((card.timesCorrect / Math.max(1, card.timesStudied)) * 100)}% accuracy`}
@@ -1336,18 +1025,14 @@ Positioned – manoeuvred in to place (mobile crane)
             );
         });
 
-        // Enhanced Card Editor with Tags
-        const MobileCardEditor = memo(({ card, onSave, onCancel }: {
-            card?: Card;
-            onSave: (cardData: any) => void;
-            onCancel: () => void;
-        }) => {
+        // Card Editor Component
+        const MobileCardEditor = memo(({ card, onSave, onCancel }) => {
             const { state: { theme } } = useFlashCards();
             const [question, setQuestion] = useState(card?.question || '');
             const [answer, setAnswer] = useState(card?.answer || '');
             const [category, setCategory] = useState(card?.category || '');
             const [points, setPoints] = useState(card?.points || 1);
-            const [tags, setTags] = useState<string[]>(card?.tags || []);
+            const [tags, setTags] = useState(card?.tags || []);
             const [newTag, setNewTag] = useState('');
             
             const handleSubmit = useCallback(() => {
@@ -1374,7 +1059,7 @@ Positioned – manoeuvred in to place (mobile crane)
                 }
             }, [newTag, tags]);
             
-            const removeTag = useCallback((tagToRemove: string) => {
+            const removeTag = useCallback((tagToRemove) => {
                 setTags(tags.filter(tag => tag !== tagToRemove));
             }, [tags]);
             
@@ -1519,15 +1204,292 @@ Positioned – manoeuvred in to place (mobile crane)
             );
         });
 
-        // ========================================
-        // PROVIDER COMPONENT
-        // ========================================
-        
-        function FlashCardsProvider({ children }: { children: React.ReactNode }) {
-            const [state, setState] = useState<AppState>(() => {
+        // Spaced Repetition Study Mode Component
+        const SpacedRepetitionStudyMode = memo(({ cards, onComplete }) => {
+            const { state: { theme, settings }, updateCardProgress } = useFlashCards();
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [isFlipped, setIsFlipped] = useState(false);
+            const [startTime] = useState(Date.now());
+            const [results, setResults] = useState([]);
+            
+            const sortedCards = useMemo(() => {
+                const now = new Date();
+                return [...cards].sort((a, b) => {
+                    const aReview = a.nextReview ? new Date(a.nextReview) : now;
+                    const bReview = b.nextReview ? new Date(b.nextReview) : now;
+                    return aReview.getTime() - bReview.getTime();
+                });
+            }, [cards]);
+            
+            const currentCard = sortedCards[currentIndex];
+            
+            const handleDifficultyResponse = useCallback((difficulty) => {
+                const timeSpent = Date.now() - startTime;
+                const quality = { again: 0, hard: 1, medium: 2, easy: 3 }[difficulty];
+                
+                const result = {
+                    cardId: currentCard.id,
+                    correct: quality >= 2,
+                    timeSpent,
+                    difficulty
+                };
+                
+                setResults(prev => [...prev, result]);
+                updateCardProgress(currentCard.id, result);
+                
+                if (currentIndex < sortedCards.length - 1) {
+                    setCurrentIndex(currentIndex + 1);
+                    setIsFlipped(false);
+                } else {
+                    const duration = Math.floor((Date.now() - startTime) / 1000);
+                    const correct = results.filter(r => r.correct).length + (quality >= 2 ? 1 : 0);
+                    onComplete({
+                        correct,
+                        incorrect: results.length + 1 - correct,
+                        duration,
+                        mode: 'spaced-repetition'
+                    });
+                }
+            }, [currentCard, currentIndex, sortedCards.length, results, updateCardProgress, startTime, onComplete]);
+            
+            if (!currentCard) {
+                return (
+                    <div className="text-center py-12">
+                        <Icon name="check" className="w-16 h-16 mx-auto mb-4 text-green-500" />
+                        <h2 className="text-xl font-bold mb-2">All caught up!</h2>
+                        <p className="text-gray-500">No cards due for review right now.</p>
+                    </div>
+                );
+            }
+            
+            const cleanQuestion = currentCard.question.replace(/^Q\d+\)\s*/, '');
+            
+            return (
+                <div className="space-y-4">
+                    <div className="p-4 rounded-xl">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm font-medium">
+                                Card {currentIndex + 1} of {sortedCards.length}
+                            </span>
+                            <span className="text-xs text-blue-500">Smart Review</span>
+                        </div>
+                        <div className={`h-2 rounded-full overflow-hidden ${
+                            theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
+                        }`}>
+                            <div
+                                className="h-full bg-blue-500 transition-all duration-500"
+                                style={{ width: `${((currentIndex + 1) / sortedCards.length) * 100}%` }}
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="px-4">
+                        <div 
+                            className={`relative w-full h-96 perspective-1000 cursor-pointer`}
+                            onClick={() => setIsFlipped(!isFlipped)}
+                        >
+                            <div className={`relative w-full h-full transition-transform duration-500 transform-style-preserve-3d ${
+                                isFlipped ? 'rotate-y-180' : ''
+                            }`}>
+                                <div className={`absolute inset-0 backface-hidden rounded-2xl p-8 flex flex-col justify-center ${
+                                    theme === 'dark' 
+                                        ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
+                                        : 'bg-gradient-to-br from-white to-gray-100'
+                                } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                                    <div className="text-center">
+                                        <h2 className="text-lg font-medium leading-relaxed">{cleanQuestion}</h2>
+                                    </div>
+                                    <div className="text-center text-sm opacity-70 mt-6">
+                                        Tap to reveal answer
+                                    </div>
+                                </div>
+                                
+                                <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-2xl p-8 flex flex-col justify-center ${
+                                    theme === 'dark' 
+                                        ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
+                                        : 'bg-gradient-to-br from-blue-50 to-blue-100'
+                                } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                                    <div className="text-center">
+                                        <h2 className="text-lg font-medium leading-relaxed whitespace-pre-line">{currentCard.answer}</h2>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {isFlipped && (
+                        <div className="px-4 animate-slide-in">
+                            <p className="text-center text-sm mb-4 opacity-70">How well did you know this?</p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button
+                                    onClick={() => handleDifficultyResponse('again')}
+                                    className="py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 font-medium"
+                                >
+                                    Again (&lt;1m)
+                                </button>
+                                <button
+                                    onClick={() => handleDifficultyResponse('hard')}
+                                    className="py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 font-medium"
+                                >
+                                    Hard (6m)
+                                </button>
+                                <button
+                                    onClick={() => handleDifficultyResponse('medium')}
+                                    className="py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
+                                >
+                                    Good (10m)
+                                </button>
+                                <button
+                                    onClick={() => handleDifficultyResponse('easy')}
+                                    className="py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 font-medium"
+                                >
+                                    Easy (4d)
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        });
+
+        // Standard Study Mode (Simplified from previous version)
+        const StandardStudyMode = memo(({ cards, onComplete }) => {
+            const { state: { theme } } = useFlashCards();
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [isFlipped, setIsFlipped] = useState(false);
+            const [startTime] = useState(Date.now());
+            
+            const currentCard = cards[currentIndex];
+            const progress = ((currentIndex + 1) / cards.length) * 100;
+            
+            const totalPoints = useMemo(() => {
+                return cards.reduce((sum, card) => sum + (card.points || 1), 0);
+            }, [cards]);
+            
+            const handleNext = useCallback(() => {
+                if (currentIndex < cards.length - 1) {
+                    setCurrentIndex(currentIndex + 1);
+                    setIsFlipped(false);
+                } else {
+                    const duration = Math.floor((Date.now() - startTime) / 1000);
+                    onComplete({ 
+                        correct: cards.length,
+                        incorrect: 0, 
+                        duration,
+                        mode: 'standard'
+                    });
+                }
+            }, [currentIndex, cards.length, startTime, onComplete]);
+            
+            if (!currentCard) {
+                return (
+                    <div className="flex items-center justify-center h-96">
+                        <div className="text-center">
+                            <Icon name="study" className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                            <p className="text-lg">No cards to study</p>
+                        </div>
+                    </div>
+                );
+            }
+            
+            const cleanQuestion = currentCard.question.replace(/^Q\d+\)\s*/, '');
+            
+            return (
+                <div className="space-y-4 pb-6">
+                    <div className="p-4 rounded-xl">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm font-medium">
+                                Question {currentIndex + 1} of {cards.length}
+                            </span>
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-1">
+                                    <Icon name="points" className="w-4 h-4 text-blue-500" />
+                                    <span className="text-sm font-medium">{totalPoints}pt total</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className={`h-2 rounded-full overflow-hidden ${
+                            theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
+                        }`}>
+                            <div
+                                className="h-full bg-blue-500 transition-all duration-500"
+                                style={{ width: `${progress}%` }}
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="px-4">
+                        <div 
+                            className={`relative w-full h-96 perspective-1000 cursor-pointer`}
+                            onClick={() => setIsFlipped(!isFlipped)}
+                        >
+                            <div className={`relative w-full h-full transition-transform duration-500 transform-style-preserve-3d ${
+                                isFlipped ? 'rotate-y-180' : ''
+                            }`}>
+                                <div className={`absolute inset-0 backface-hidden rounded-2xl p-8 flex flex-col justify-center ${
+                                    theme === 'dark' 
+                                        ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
+                                        : 'bg-gradient-to-br from-white to-gray-100'
+                                } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                                    <div className="text-center">
+                                        <h2 className="text-lg font-medium leading-relaxed">{cleanQuestion}</h2>
+                                    </div>
+                                    <div className="text-center text-sm opacity-70 mt-6">
+                                        Tap to reveal answer
+                                    </div>
+                                </div>
+                                
+                                <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-2xl p-8 flex flex-col justify-center ${
+                                    theme === 'dark' 
+                                        ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
+                                        : 'bg-gradient-to-br from-blue-50 to-blue-100'
+                                } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                                    <div className="text-center">
+                                        <h2 className="text-lg font-medium leading-relaxed whitespace-pre-line">{currentCard.answer}</h2>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="px-4">
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                onClick={() => {
+                                    if (currentIndex > 0) {
+                                        setCurrentIndex(currentIndex - 1);
+                                        setIsFlipped(false);
+                                    }
+                                }}
+                                disabled={currentIndex === 0}
+                                className={`py-3 rounded-xl border font-medium transition-all ${
+                                    currentIndex === 0
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : theme === 'dark'
+                                        ? 'border-gray-700 hover:bg-gray-800'
+                                        : 'border-gray-300 hover:bg-gray-100'
+                                }`}
+                            >
+                                ← Previous
+                            </button>
+                            <button
+                                onClick={handleNext}
+                                className="py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium transition-all"
+                            >
+                                {currentIndex === cards.length - 1 ? 'Complete' : 'Next →'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        });
+
+        // Provider Component
+        function FlashCardsProvider({ children }) {
+            const [state, setState] = useState(() => {
                 const saved = StorageService.load();
                 if (saved?.cards) {
-                    saved.cards = saved.cards.map((card: any) => ({
+                    saved.cards = saved.cards.map(card => ({
                         ...card,
                         points: card.points || 1,
                         streak: card.streak || 0,
@@ -1549,7 +1511,7 @@ Positioned – manoeuvred in to place (mobile crane)
                 };
             });
             
-            const [achievementNotification, setAchievementNotification] = useState<Achievement | null>(null);
+            const [achievementNotification, setAchievementNotification] = useState(null);
             
             useEffect(() => {
                 StorageService.save(state);
@@ -1559,13 +1521,13 @@ Positioned – manoeuvred in to place (mobile crane)
                 document.documentElement.classList.toggle('dark', state.theme === 'dark');
             }, [state.theme]);
             
-            const addCard = useCallback((card: Omit<Card, 'id' | 'created' | 'lastStudied' | 'nextReview' | 'timesStudied' | 'timesCorrect' | 'easeFactor' | 'interval' | 'repetitions' | 'lapses' | 'streak'>) => {
+            const addCard = useCallback((card) => {
                 if (!validateCard(card)) {
                     console.error('Invalid card data:', card);
                     return;
                 }
                 
-                const newCard: Card = {
+                const newCard = {
                     ...card,
                     id: Date.now().toString(),
                     created: new Date().toISOString(),
@@ -1587,7 +1549,7 @@ Positioned – manoeuvred in to place (mobile crane)
                 }));
             }, []);
             
-            const updateCard = useCallback((id: string, updates: Partial<Card>) => {
+            const updateCard = useCallback((id, updates) => {
                 setState(prev => ({
                     ...prev,
                     cards: prev.cards.map(card => 
@@ -1599,14 +1561,14 @@ Positioned – manoeuvred in to place (mobile crane)
                 }));
             }, []);
             
-            const deleteCard = useCallback((id: string) => {
+            const deleteCard = useCallback((id) => {
                 setState(prev => ({
                     ...prev,
                     cards: prev.cards.filter(card => card.id !== id),
                 }));
             }, []);
             
-            const addStudySession = useCallback((session: Omit<StudySession, 'id'>) => {
+            const addStudySession = useCallback((session) => {
                 const newSession = { ...session, id: Date.now().toString() };
                 
                 setState(prev => {
@@ -1615,12 +1577,10 @@ Positioned – manoeuvred in to place (mobile crane)
                     
                     let newStreak = prev.currentStreak;
                     if (lastStudy === today) {
-                        // Already studied today, don't increment streak
+                        // Already studied today
                     } else if (lastStudy === new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]) {
-                        // Studied yesterday, increment streak
                         newStreak += 1;
                     } else {
-                        // Broke streak or first study
                         newStreak = 1;
                     }
                     
@@ -1634,7 +1594,6 @@ Positioned – manoeuvred in to place (mobile crane)
                         lastStudyDate: new Date().toISOString(),
                     };
                     
-                    // Check for new achievements
                     const newAchievements = AchievementService.checkAchievements(newState, newSession);
                     if (newAchievements.length > 0) {
                         setAchievementNotification(newAchievements[0]);
@@ -1645,7 +1604,7 @@ Positioned – manoeuvred in to place (mobile crane)
                 });
             }, []);
             
-            const updateCardProgress = useCallback((cardId: string, result: StudyResult) => {
+            const updateCardProgress = useCallback((cardId, result) => {
                 setState(prev => ({
                     ...prev,
                     cards: prev.cards.map(card => {
@@ -1680,7 +1639,7 @@ Positioned – manoeuvred in to place (mobile crane)
                 }));
             }, []);
             
-            const importData = useCallback((importedData: any) => {
+            const importData = useCallback((importedData) => {
                 if (!importedData || !Array.isArray(importedData.cards)) {
                     console.error('Invalid import data');
                     return;
@@ -1739,25 +1698,17 @@ Positioned – manoeuvred in to place (mobile crane)
                 getAnalytics,
             }), [state, addCard, updateCard, deleteCard, addStudySession, toggleTheme, importData, clearAllCards, toggleSpeech, updateCardProgress, getAnalytics]);
             
-            return (
-                <>
-                    <FlashCardsContext.Provider value={value}>
-                        {children}
-                    </FlashCardsContext.Provider>
-                    {achievementNotification && (
-                        <AchievementNotification
-                            achievement={achievementNotification}
-                            onClose={() => setAchievementNotification(null)}
-                        />
-                    )}
-                </>
-            );
+            return React.createElement(FlashCardsContext.Provider, { value }, [
+                children,
+                achievementNotification && React.createElement(AchievementNotification, {
+                    key: 'achievement',
+                    achievement: achievementNotification,
+                    onClose: () => setAchievementNotification(null)
+                })
+            ]);
         }
 
-        // ========================================
-        // MAIN APP COMPONENT
-        // ========================================
-        
+        // Main App Component
         function MobileFlashCardsApp() {
             const { 
                 state, 
@@ -1774,36 +1725,33 @@ Positioned – manoeuvred in to place (mobile crane)
             
             const { theme, cards, categories, settings, currentStreak, totalPointsEarned } = state;
             
-            const [activeView, setActiveView] = useState<'cards' | 'study' | 'stats'>('cards');
+            const [activeView, setActiveView] = useState('cards');
             const [searchQuery, setSearchQuery] = useState('');
             const [selectedCategory, setSelectedCategory] = useState('');
-            const [selectedPoints, setSelectedPoints] = useState<number[]>([]);
-            const [selectedTags, setSelectedTags] = useState<string[]>([]);
+            const [selectedPoints, setSelectedPoints] = useState([]);
+            const [selectedTags, setSelectedTags] = useState([]);
             const [showCardEditor, setShowCardEditor] = useState(false);
-            const [editingCard, setEditingCard] = useState<Card | undefined>(undefined);
+            const [editingCard, setEditingCard] = useState(undefined);
             const [isStudying, setIsStudying] = useState(false);
             const [showMenu, setShowMenu] = useState(false);
             const [showPointsSelection, setShowPointsSelection] = useState(false);
-            const [studyCards, setStudyCards] = useState<Card[]>([]);
-            const [studyMode, setStudyMode] = useState<'standard' | 'spaced-repetition'>('standard');
+            const [studyCards, setStudyCards] = useState([]);
+            const [studyMode, setStudyMode] = useState('standard');
             
-            const fileInputRef = useRef<HTMLInputElement>(null);
+            const fileInputRef = useRef(null);
             
-            // Get available tags
             const availableTags = useMemo(() => {
-                const allTags = new Set<string>();
+                const allTags = new Set();
                 cards.forEach(card => {
                     card.tags?.forEach(tag => allTags.add(tag));
                 });
                 return Array.from(allTags);
             }, [cards]);
             
-            // Get unique point values
             const availablePoints = useMemo(() => {
                 return [...new Set(cards.map(card => card.points || 1))].sort((a, b) => a - b);
             }, [cards]);
             
-            // Enhanced filtered cards with fuzzy search
             const filteredCards = useMemo(() => {
                 return cards.filter(card => {
                     const matchesSearch = !searchQuery || (
@@ -1821,12 +1769,11 @@ Positioned – manoeuvred in to place (mobile crane)
                 });
             }, [cards, searchQuery, selectedCategory, selectedPoints, selectedTags, settings.fuzzySearchEnabled]);
             
-            // Spaced repetition due cards
             const dueCards = useMemo(() => {
                 const now = new Date();
                 return cards.filter(card => {
-                    if (!card.nextReview) return card.timesStudied === 0; // New cards
-                    return new Date(card.nextReview) <= now; // Due cards
+                    if (!card.nextReview) return card.timesStudied === 0;
+                    return new Date(card.nextReview) <= now;
                 });
             }, [cards]);
             
@@ -1834,7 +1781,6 @@ Positioned – manoeuvred in to place (mobile crane)
                 return cards.reduce((sum, card) => sum + (card.points || 1), 0);
             }, [cards]);
             
-            // Clean up speech when changing views
             useEffect(() => {
                 if (activeView !== 'study' || !isStudying) {
                     SpeechService.stop();
@@ -1858,7 +1804,7 @@ Positioned – manoeuvred in to place (mobile crane)
                 }
             }, [cards.length, clearAllCards]);
             
-            const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+            const handleFileChange = useCallback((event) => {
                 const file = event.target.files?.[0];
                 if (!file) return;
                 
@@ -1876,7 +1822,7 @@ Positioned – manoeuvred in to place (mobile crane)
                 event.target.value = '';
             }, [importData]);
             
-            const handleStudyComplete = useCallback((results: any) => {
+            const handleStudyComplete = useCallback((results) => {
                 const pointsEarned = studyCards
                     .slice(0, results.correct)
                     .reduce((sum, card) => sum + (card.points || 1), 0);
@@ -1896,38 +1842,38 @@ Positioned – manoeuvred in to place (mobile crane)
                 setStudyCards([]);
             }, [addStudySession, studyCards, studyMode, currentStreak]);
             
-            const startStudyingCard = useCallback((card: Card) => {
+            const startStudyingCard = useCallback((card) => {
                 SpeechService.stop();
                 setStudyCards([card]);
                 setIsStudying(true);
                 setActiveView('study');
             }, []);
             
-            const handlePointsSelectionForStudy = useCallback((points: number[]) => {
+            const handlePointsSelectionForStudy = useCallback((points) => {
                 const cardsToStudy = cards.filter(card => points.includes(card.points || 1));
                 setStudyCards(cardsToStudy);
                 setShowPointsSelection(false);
                 setIsStudying(true);
             }, [cards]);
             
-            const handleViewChange = useCallback((newView: 'cards' | 'study' | 'stats') => {
+            const handleViewChange = useCallback((newView) => {
                 SpeechService.stop();
                 setActiveView(newView);
                 setIsStudying(false);
             }, []);
             
-            const handleCardEdit = useCallback((card: Card) => {
+            const handleCardEdit = useCallback((card) => {
                 setEditingCard(card);
                 setShowCardEditor(true);
             }, []);
             
-            const handleCardDelete = useCallback((cardId: string) => {
+            const handleCardDelete = useCallback((cardId) => {
                 if (confirm('Delete this card?')) {
                     deleteCard(cardId);
                 }
             }, [deleteCard]);
             
-            const handleCardSave = useCallback((cardData: any) => {
+            const handleCardSave = useCallback((cardData) => {
                 if (editingCard) {
                     updateCard(editingCard.id, cardData);
                 } else {
@@ -1963,7 +1909,6 @@ Positioned – manoeuvred in to place (mobile crane)
                                         </span>
                                     </h1>
                                     
-                                    {/* Streak indicator */}
                                     {currentStreak > 0 && (
                                         <div className="flex items-center gap-1 text-orange-500">
                                             <Icon name="fire" className="w-4 h-4" />
@@ -1973,7 +1918,6 @@ Positioned – manoeuvred in to place (mobile crane)
                                 </div>
                                 
                                 <div className="flex items-center gap-2">
-                                    {/* Points display */}
                                     <div className="flex items-center gap-1 text-yellow-500">
                                         <Icon name="points" className="w-4 h-4" />
                                         <span className="text-sm font-bold">{totalPointsEarned}</span>
@@ -2016,7 +1960,6 @@ Positioned – manoeuvred in to place (mobile crane)
                                         fuzzyEnabled={settings.fuzzySearchEnabled}
                                     />
                                     
-                                    {/* Points filter */}
                                     {availablePoints.length > 0 && (
                                         <div className="flex gap-2 overflow-x-auto pb-1">
                                             <button
@@ -2205,7 +2148,6 @@ Positioned – manoeuvred in to place (mobile crane)
                             <div className="space-y-6">
                                 <h2 className="text-2xl font-bold text-center mb-6">Ready to Study? 📚</h2>
                                 
-                                {/* Spaced Repetition Section */}
                                 {settings.spacedRepetitionEnabled && dueCards.length > 0 && (
                                     <div className={`p-6 rounded-xl ${
                                         theme === 'dark' ? 'bg-gradient-to-r from-purple-900 to-purple-800' : 'bg-gradient-to-r from-purple-100 to-purple-200'
@@ -2231,7 +2173,6 @@ Positioned – manoeuvred in to place (mobile crane)
                                     </div>
                                 )}
                                 
-                                {/* Regular Study Options */}
                                 <div className={`p-6 rounded-xl ${
                                     theme === 'dark' ? 'bg-gray-800' : 'bg-white'
                                 } text-center`}>
@@ -2266,7 +2207,6 @@ Positioned – manoeuvred in to place (mobile crane)
                                     </div>
                                 </div>
                                 
-                                {/* Quick Stats */}
                                 <div className={`grid grid-cols-3 gap-3 ${
                                     theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
                                 }`}>
@@ -2296,6 +2236,13 @@ Positioned – manoeuvred in to place (mobile crane)
                             />
                         )}
                         
+                        {isStudying && studyMode === 'standard' && (
+                            <StandardStudyMode
+                                cards={studyCards}
+                                onComplete={handleStudyComplete}
+                            />
+                        )}
+                        
                         {activeView === 'stats' && (
                             <div className="space-y-6">
                                 <div className="text-center mb-6">
@@ -2312,7 +2259,6 @@ Positioned – manoeuvred in to place (mobile crane)
                                     </div>
                                 </div>
                                 
-                                {/* Achievements */}
                                 {state.achievements.length > 0 && (
                                     <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
                                         <h3 className="font-semibold mb-3">🏆 Achievements</h3>
@@ -2334,7 +2280,6 @@ Positioned – manoeuvred in to place (mobile crane)
                         )}
                     </main>
                     
-                    {/* Enhanced navigation */}
                     <nav className={`fixed bottom-0 left-0 right-0 ${
                         theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
                     } border-t px-4 py-2`}>
@@ -2387,7 +2332,6 @@ Positioned – manoeuvred in to place (mobile crane)
                         </div>
                     </nav>
                     
-                    {/* Modals */}
                     {showCardEditor && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center p-4 z-50 overflow-y-auto">
                             <div className={`w-full max-w-md mt-8 mb-8 rounded-2xl p-6 ${
@@ -2478,10 +2422,6 @@ Positioned – manoeuvred in to place (mobile crane)
             );
         }
 
-        // ========================================
-        // APP ENTRY POINT
-        // ========================================
-        
         function App() {
             return (
                 <ErrorBoundary>
@@ -2492,7 +2432,6 @@ Positioned – manoeuvred in to place (mobile crane)
             );
         }
 
-        // Render the app
         ReactDOM.render(React.createElement(App), document.getElementById('root'));
     </script>
 </body>
