@@ -1294,8 +1294,8 @@
                             }`}>
                                 <div className={`absolute inset-0 backface-hidden rounded-2xl p-8 flex flex-col justify-center ${
                                     theme === 'dark' 
-                                        ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
-                                        : 'bg-gradient-to-br from-white to-gray-100'
+                                        ? 'bg-black text-white' 
+                                        : 'bg-white'
                                 } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                                     <div className="text-center">
                                         <h2 className="text-lg font-medium leading-relaxed">{cleanQuestion}</h2>
@@ -1307,10 +1307,10 @@
                                 
                                 <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-2xl p-8 flex flex-col justify-center ${
                                     theme === 'dark' 
-                                        ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
-                                        : 'bg-gradient-to-br from-blue-50 to-blue-100'
+                                        ? 'bg-black text-white' 
+                                        : 'bg-white'
                                 } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                                    <div className="text-center">
+                                    <div className="text-center max-h-80 overflow-y-auto">
                                         <h2 className="text-lg font-medium leading-relaxed whitespace-pre-line">{currentCard.answer}</h2>
                                     </div>
                                 </div>
@@ -1460,8 +1460,8 @@
                             }`}>
                                 <div className={`absolute inset-0 backface-hidden rounded-2xl p-8 flex flex-col justify-center ${
                                     theme === 'dark' 
-                                        ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
-                                        : 'bg-gradient-to-br from-white to-gray-100'
+                                        ? 'bg-black text-white' 
+                                        : 'bg-white'
                                 } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                                     <div className="text-center">
                                         <h2 className="text-lg font-medium leading-relaxed">{cleanQuestion}</h2>
@@ -1473,10 +1473,10 @@
                                 
                                 <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-2xl p-8 flex flex-col justify-center ${
                                     theme === 'dark' 
-                                        ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
-                                        : 'bg-gradient-to-br from-blue-50 to-blue-100'
+                                        ? 'bg-black text-white' 
+                                        : 'bg-white'
                                 } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                                    <div className="text-center">
+                                    <div className="text-center max-h-80 overflow-y-auto">
                                         <h2 className="text-lg font-medium leading-relaxed whitespace-pre-line">{currentCard.answer}</h2>
                                     </div>
                                 </div>
@@ -1930,14 +1930,9 @@
                         <div className="px-4 py-3">
                             <div className="flex justify-between items-center">
                                 <div className="flex items-center gap-3">
-                                    <h1 className="text-xl font-bold flex items-center gap-2">
+                                    <h1 className="text-xl font-bold">
                                         <span className="bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
                                             Flash Cards Pro
-                                        </span>
-                                        <span className={`text-sm px-2 py-0.5 rounded-full ${
-                                            theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
-                                        }`}>
-                                            v{APP_VERSION} 🔊
                                         </span>
                                     </h1>
                                     
@@ -1950,9 +1945,16 @@
                                 </div>
                                 
                                 <div className="flex items-center gap-2">
-                                    <div className="flex items-center gap-1 text-yellow-500">
-                                        <Icon name="points" className="w-4 h-4" />
-                                        <span className="text-sm font-bold">{totalPointsEarned}</span>
+                                    <div className="flex flex-col items-center">
+                                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                            theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
+                                        }`}>
+                                            v{APP_VERSION} 🔊
+                                        </span>
+                                        <div className="flex items-center gap-1 text-yellow-500 mt-1">
+                                            <Icon name="points" className="w-4 h-4" />
+                                            <span className="text-sm font-bold">{totalPointsEarned}</span>
+                                        </div>
                                     </div>
                                     
                                     <button
