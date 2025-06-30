@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1f2937">
-    <title>Flash Cards Pro v6.4</title>
+    <title>Flash Cards Pro v6.5</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -37,6 +37,19 @@
             overflow: hidden; 
         }
         button:active { transform: scale(0.98); }
+        
+        .sentence-highlight {
+            background: linear-gradient(120deg, #fef08a 0%, #facc15 100%);
+            color: #000;
+            padding: 2px 4px;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .sentence-normal {
+            transition: all 0.3s ease;
+        }
         
         @keyframes fadeInUp {
             from {
@@ -122,8 +135,8 @@
         // CONSTANTS & UTILITIES
         // ========================================
         
-        const APP_VERSION = '6.4';
-        const STORAGE_KEY = 'flashcards-pro-v64';
+        const APP_VERSION = '6.5';
+        const STORAGE_KEY = 'flashcards-pro-v65';
         
         // Spaced Repetition Algorithm
         const calculateNextReview = (easeFactor, interval, quality) => {
@@ -194,6 +207,21 @@
             return matrix[str2.length][str1.length];
         };
         
+        // Sentence splitting utility
+        const splitIntoSentences = (text) => {
+            if (!text) return [];
+            
+            // Enhanced sentence splitting that handles abbreviations and numbers better
+            const sentences = text
+                .replace(/([.!?]+)\s*([A-Z])/g, '$1|$2') // Split on sentence endings followed by capital letters
+                .replace(/(\d+\.)\s*([a-z])/g, '$1 $2') // Don't split on numbered lists
+                .split('|')
+                .map(s => s.trim())
+                .filter(s => s.length > 0);
+            
+            return sentences;
+        };
+        
         // Achievement definitions
         const ACHIEVEMENTS = [
             { id: 'first_study', title: 'Getting Started', description: 'Complete your first study session', icon: '🎯', category: 'study' },
@@ -241,12 +269,15 @@
             static currentUtterance = null;
             static isPlaying = false;
             static isSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+            static highlightCallback = null;
+            static sentenceTimers = [];
             
-            static speak(text, settings = {}) {
+            static speak(text, settings = {}, onSentenceHighlight = null) {
                 if (!this.isSupported || !settings.speechEnabled || !text?.trim()) return;
                 
                 try {
                     this.stop();
+                    this.highlightCallback = onSentenceHighlight;
                     
                     const utterance = new SpeechSynthesisUtterance(text.trim());
                     utterance.rate = Math.max(0.1, Math.min(2.0, settings.speechRate || 1.0));
@@ -263,15 +294,28 @@
                     this.currentUtterance = utterance;
                     this.isPlaying = true;
                     
+                    // If we have a highlight callback, implement sentence tracking
+                    if (onSentenceHighlight) {
+                        this.setupSentenceHighlighting(text, utterance, settings);
+                    }
+                    
                     utterance.onend = () => {
                         this.currentUtterance = null;
                         this.isPlaying = false;
+                        this.clearTimers();
+                        if (onSentenceHighlight) {
+                            onSentenceHighlight(-1); // Clear all highlights
+                        }
                     };
                     
                     utterance.onerror = (error) => {
                         console.warn('Speech synthesis error:', error);
                         this.currentUtterance = null;
                         this.isPlaying = false;
+                        this.clearTimers();
+                        if (onSentenceHighlight) {
+                            onSentenceHighlight(-1);
+                        }
                     };
                     
                     window.speechSynthesis.speak(utterance);
@@ -279,7 +323,37 @@
                     console.error('Speech service error:', error);
                     this.currentUtterance = null;
                     this.isPlaying = false;
+                    this.clearTimers();
                 }
+            }
+            
+            static setupSentenceHighlighting(text, utterance, settings) {
+                const sentences = splitIntoSentences(text);
+                if (sentences.length <= 1) return;
+                
+                // Estimate timing based on speech rate and text length
+                const baseRate = settings.speechRate || 1.0;
+                const wordsPerMinute = 150 * baseRate; // Average speaking speed
+                let currentTime = 0;
+                
+                sentences.forEach((sentence, index) => {
+                    const words = sentence.split(' ').length;
+                    const duration = (words / wordsPerMinute) * 60 * 1000; // Convert to milliseconds
+                    
+                    const timer = setTimeout(() => {
+                        if (this.highlightCallback && this.isPlaying) {
+                            this.highlightCallback(index);
+                        }
+                    }, currentTime);
+                    
+                    this.sentenceTimers.push(timer);
+                    currentTime += duration;
+                });
+            }
+            
+            static clearTimers() {
+                this.sentenceTimers.forEach(timer => clearTimeout(timer));
+                this.sentenceTimers = [];
             }
             
             static stop() {
@@ -291,6 +365,11 @@
                     }
                     this.currentUtterance = null;
                     this.isPlaying = false;
+                    this.clearTimers();
+                    if (this.highlightCallback) {
+                        this.highlightCallback(-1);
+                        this.highlightCallback = null;
+                    }
                 }
             }
             
@@ -651,6 +730,48 @@
                 className: `inline-block ${className}`,
                 style: { fontSize: '1.2em' }
             }, icons[name] || "📝");
+        });
+
+        // Highlighted Text Component
+        const HighlightedText = memo(({ text, highlightedSentenceIndex, containerClassName = "" }) => {
+            const sentences = useMemo(() => splitIntoSentences(text), [text]);
+            const sentenceRefs = useRef([]);
+            
+            useEffect(() => {
+                if (highlightedSentenceIndex >= 0 && highlightedSentenceIndex < sentences.length) {
+                    const element = sentenceRefs.current[highlightedSentenceIndex];
+                    if (element) {
+                        element.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'center',
+                            inline: 'nearest'
+                        });
+                    }
+                }
+            }, [highlightedSentenceIndex, sentences.length]);
+            
+            if (sentences.length <= 1) {
+                return <span className={containerClassName}>{text}</span>;
+            }
+            
+            return (
+                <div className={containerClassName}>
+                    {sentences.map((sentence, index) => (
+                        <span
+                            key={index}
+                            ref={el => sentenceRefs.current[index] = el}
+                            className={`${
+                                highlightedSentenceIndex === index 
+                                    ? 'sentence-highlight' 
+                                    : 'sentence-normal'
+                            }`}
+                        >
+                            {sentence}
+                            {index < sentences.length - 1 ? ' ' : ''}
+                        </span>
+                    ))}
+                </div>
+            );
         });
 
         // Error Boundary
@@ -1186,6 +1307,7 @@
             const [isFlipped, setIsFlipped] = useState(false);
             const [startTime] = useState(Date.now());
             const [results, setResults] = useState([]);
+            const [highlightedSentenceIndex, setHighlightedSentenceIndex] = useState(-1);
             
             const sortedCards = useMemo(() => {
                 const now = new Date();
@@ -1202,14 +1324,14 @@
             useEffect(() => {
                 if (currentCard && settings.speechEnabled && settings.autoReadQuestion && !isFlipped) {
                     const cleanQuestion = currentCard.question.replace(/^Q\d+\)\s*/, '');
-                    SpeechService.speak(cleanQuestion, settings);
+                    SpeechService.speak(cleanQuestion, settings, setHighlightedSentenceIndex);
                 }
             }, [currentCard, settings, isFlipped]);
             
             // Auto-read answer when flipped
             useEffect(() => {
                 if (currentCard && isFlipped && settings.speechEnabled && settings.autoReadAnswer) {
-                    SpeechService.speak(currentCard.answer, settings);
+                    SpeechService.speak(currentCard.answer, settings, setHighlightedSentenceIndex);
                 }
             }, [currentCard, isFlipped, settings]);
             
@@ -1231,6 +1353,7 @@
                 if (currentIndex < sortedCards.length - 1) {
                     setCurrentIndex(currentIndex + 1);
                     setIsFlipped(false);
+                    setHighlightedSentenceIndex(-1);
                 } else {
                     const duration = Math.floor((Date.now() - startTime) / 1000);
                     const correct = results.filter(r => r.correct).length + (quality >= 1 ? 1 : 0);
@@ -1266,7 +1389,10 @@
                                 <span className="text-xs text-blue-500">Smart Review</span>
                                 {settings.speechEnabled && (
                                     <button
-                                        onClick={() => SpeechService.stop()}
+                                        onClick={() => {
+                                            SpeechService.stop();
+                                            setHighlightedSentenceIndex(-1);
+                                        }}
                                         className="text-xs text-orange-500 hover:text-orange-600"
                                     >
                                         🔊 Stop
@@ -1298,7 +1424,11 @@
                                         : 'bg-white'
                                 } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                                     <div className="text-center">
-                                        <h2 className="text-lg font-medium leading-relaxed">{cleanQuestion}</h2>
+                                        <HighlightedText 
+                                            text={cleanQuestion}
+                                            highlightedSentenceIndex={!isFlipped ? highlightedSentenceIndex : -1}
+                                            containerClassName="text-lg font-medium leading-relaxed"
+                                        />
                                     </div>
                                     <div className="text-center text-sm opacity-70 mt-6">
                                         Tap to reveal answer
@@ -1311,7 +1441,11 @@
                                         : 'bg-white'
                                 } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                                     <div className="text-center max-h-80 overflow-y-auto">
-                                        <h2 className="text-lg font-medium leading-relaxed whitespace-pre-line">{currentCard.answer}</h2>
+                                        <HighlightedText 
+                                            text={currentCard.answer}
+                                            highlightedSentenceIndex={isFlipped ? highlightedSentenceIndex : -1}
+                                            containerClassName="text-lg font-medium leading-relaxed whitespace-pre-line"
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -1367,6 +1501,7 @@
             const [currentIndex, setCurrentIndex] = useState(0);
             const [isFlipped, setIsFlipped] = useState(false);
             const [startTime] = useState(Date.now());
+            const [highlightedSentenceIndex, setHighlightedSentenceIndex] = useState(-1);
             
             const currentCard = cards[currentIndex];
             const progress = ((currentIndex + 1) / cards.length) * 100;
@@ -1379,14 +1514,14 @@
             useEffect(() => {
                 if (currentCard && settings.speechEnabled && settings.autoReadQuestion && !isFlipped) {
                     const cleanQuestion = currentCard.question.replace(/^Q\d+\)\s*/, '');
-                    SpeechService.speak(cleanQuestion, settings);
+                    SpeechService.speak(cleanQuestion, settings, setHighlightedSentenceIndex);
                 }
             }, [currentCard, settings, isFlipped, currentIndex]);
             
             // Auto-read answer when flipped
             useEffect(() => {
                 if (currentCard && isFlipped && settings.speechEnabled && settings.autoReadAnswer) {
-                    SpeechService.speak(currentCard.answer, settings);
+                    SpeechService.speak(currentCard.answer, settings, setHighlightedSentenceIndex);
                 }
             }, [currentCard, isFlipped, settings]);
             
@@ -1394,6 +1529,7 @@
                 if (currentIndex < cards.length - 1) {
                     setCurrentIndex(currentIndex + 1);
                     setIsFlipped(false);
+                    setHighlightedSentenceIndex(-1);
                 } else {
                     const duration = Math.floor((Date.now() - startTime) / 1000);
                     onComplete({ 
@@ -1432,7 +1568,10 @@
                                 </div>
                                 {settings.speechEnabled && (
                                     <button
-                                        onClick={() => SpeechService.stop()}
+                                        onClick={() => {
+                                            SpeechService.stop();
+                                            setHighlightedSentenceIndex(-1);
+                                        }}
                                         className="text-xs text-orange-500 hover:text-orange-600"
                                     >
                                         🔊 Stop
@@ -1464,7 +1603,11 @@
                                         : 'bg-white'
                                 } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                                     <div className="text-center">
-                                        <h2 className="text-lg font-medium leading-relaxed">{cleanQuestion}</h2>
+                                        <HighlightedText 
+                                            text={cleanQuestion}
+                                            highlightedSentenceIndex={!isFlipped ? highlightedSentenceIndex : -1}
+                                            containerClassName="text-lg font-medium leading-relaxed"
+                                        />
                                     </div>
                                     <div className="text-center text-sm opacity-70 mt-6">
                                         Tap to reveal answer
@@ -1477,7 +1620,11 @@
                                         : 'bg-white'
                                 } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                                     <div className="text-center max-h-80 overflow-y-auto">
-                                        <h2 className="text-lg font-medium leading-relaxed whitespace-pre-line">{currentCard.answer}</h2>
+                                        <HighlightedText 
+                                            text={currentCard.answer}
+                                            highlightedSentenceIndex={isFlipped ? highlightedSentenceIndex : -1}
+                                            containerClassName="text-lg font-medium leading-relaxed whitespace-pre-line"
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -1491,6 +1638,7 @@
                                     if (currentIndex > 0) {
                                         setCurrentIndex(currentIndex - 1);
                                         setIsFlipped(false);
+                                        setHighlightedSentenceIndex(-1);
                                     }
                                 }}
                                 disabled={currentIndex === 0}
