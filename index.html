@@ -261,7 +261,7 @@
 
         // Storage Service
         class StorageService {
-            static STORAGE_KEY = 'flashcards-pro-v61';
+            static STORAGE_KEY = 'flashcards-pro-v61-continuous';
             static VERSION = '6.1';
             
             static save(state) {
@@ -1952,7 +1952,133 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             );
         }
 
-        // Points Selection Modal
+        // Points Selection Modal for Continuous Study
+        function ContinuousPointsSelectionModal({ onSelect, onCancel, availablePoints, theme }) {
+            const { state: { cards } } = useFlashCards();
+            const [selectedPoints, setSelectedPoints] = useState([]);
+            
+            const togglePoint = (point) => {
+                setSelectedPoints(prev => 
+                    prev.includes(point) 
+                        ? prev.filter(p => p !== point)
+                        : [...prev, point]
+                );
+            };
+            
+            const selectAll = () => {
+                setSelectedPoints(availablePoints);
+            };
+            
+            const clearAll = () => {
+                setSelectedPoints([]);
+            };
+            
+            const getCardCountForPoints = (points) => {
+                return cards.filter(card => (card.points || 1) === points).length;
+            };
+            
+            const getSelectedCardCount = () => {
+                return cards.filter(card => selectedPoints.includes(card.points || 1)).length;
+            };
+            
+            const getTotalPoints = () => {
+                return cards
+                    .filter(card => selectedPoints.includes(card.points || 1))
+                    .reduce((sum, card) => sum + (card.points || 1), 0);
+            };
+            
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className={`w-full max-w-sm rounded-2xl p-6 ${
+                        theme === 'dark' ? 'bg-gray-900' : 'bg-white'
+                    }`}>
+                        <h3 className="text-xl font-semibold mb-2">🎵 Continuous Study by Points</h3>
+                        <p className={`text-sm mb-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                            Select which point values for auto-play. Focus on specific difficulty levels while listening hands-free!
+                        </p>
+                        
+                        <div className="grid grid-cols-3 gap-3 mb-4">
+                            {availablePoints.map(point => {
+                                const count = getCardCountForPoints(point);
+                                return (
+                                    <button
+                                        key={point}
+                                        onClick={() => togglePoint(point)}
+                                        className={`relative py-3 rounded-xl border transition-all ${
+                                            selectedPoints.includes(point)
+                                                ? getPointsColor(point) + ' border-transparent'
+                                                : theme === 'dark'
+                                                ? 'border-gray-700 hover:border-gray-600'
+                                                : 'border-gray-300 hover:border-gray-400'
+                                        }`}
+                                    >
+                                        <div className="flex flex-col items-center">
+                                            <div className="flex items-center gap-1">
+                                                <Icon name="points" className="w-4 h-4" />
+                                                <span className="font-medium">{point}pt</span>
+                                            </div>
+                                            <span className="text-xs opacity-75 mt-1">{count} cards</span>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        
+                        {selectedPoints.length > 0 && (
+                            <div className={`text-center mb-4 p-3 rounded-lg ${
+                                theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
+                            }`}>
+                                <div className="text-sm font-medium mb-1">
+                                    Selected: {getSelectedCardCount()} cards
+                                </div>
+                                <div className="text-xs opacity-75">
+                                    Total: {getTotalPoints()} points
+                                </div>
+                            </div>
+                        )}
+                        
+                        <div className="flex gap-2 mb-4">
+                            <button
+                                onClick={selectAll}
+                                className={`flex-1 py-2 px-3 rounded-lg text-sm ${
+                                    theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'
+                                }`}
+                            >
+                                Select All
+                            </button>
+                            <button
+                                onClick={clearAll}
+                                className={`flex-1 py-2 px-3 rounded-lg text-sm ${
+                                    theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'
+                                }`}
+                            >
+                                Clear All
+                            </button>
+                        </div>
+                        
+                        <div className="flex gap-3">
+                            <button
+                                onClick={onCancel}
+                                className={`flex-1 py-3 rounded-xl border ${
+                                    theme === 'dark' 
+                                        ? 'border-gray-700 hover:bg-gray-800' 
+                                        : 'border-gray-300 hover:bg-gray-100'
+                                } transition-colors font-medium`}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => onSelect(selectedPoints)}
+                                disabled={selectedPoints.length === 0}
+                                className="flex-1 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                            >
+                                Start Auto-Play
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
         function PointsSelectionModal({ onSelect, onCancel, availablePoints, theme }) {
             const { state: { cards } } = useFlashCards();
             const [selectedPoints, setSelectedPoints] = useState([]);
@@ -2352,6 +2478,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             const [isStudying, setIsStudying] = useState(false);
             const [showMenu, setShowMenu] = useState(false);
             const [showPointsSelection, setShowPointsSelection] = useState(false);
+            const [showContinuousPointsSelection, setShowContinuousPointsSelection] = useState(false);
             const [studyCards, setStudyCards] = useState([]);
             const [studyMode, setStudyMode] = useState('manual'); // 'manual', 'continuous'
             
@@ -2447,6 +2574,14 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 setStudyCards(cardsToStudy);
                 setShowPointsSelection(false);
                 setStudyMode('manual');
+                setIsStudying(true);
+            };
+            
+            const handleContinuousPointsSelectionForStudy = (points) => {
+                const cardsToStudy = cards.filter(card => points.includes(card.points || 1));
+                setStudyCards(cardsToStudy);
+                setShowContinuousPointsSelection(false);
+                setStudyMode('continuous');
                 setIsStudying(true);
             };
             
@@ -2731,9 +2866,22 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                         >
                                             <div className="absolute inset-0 bg-white opacity-10 transform translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
                                             <div className="relative flex items-center justify-center gap-2">
-                                                🎵 Continuous Auto-Play
+                                                🎵 Continuous Auto-Play (All)
                                             </div>
-                                            <div className="text-xs opacity-75 mt-1">Listen hands-free as questions & answers are read automatically</div>
+                                            <div className="text-xs opacity-75 mt-1">Listen hands-free to all {filteredCards.length} questions automatically</div>
+                                        </button>
+                                        
+                                        <button
+                                            onClick={() => setShowContinuousPointsSelection(true)}
+                                            disabled={filteredCards.length === 0}
+                                            className="w-full py-4 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium relative overflow-hidden group"
+                                        >
+                                            <div className="absolute inset-0 bg-white opacity-10 transform translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
+                                            <div className="relative flex items-center justify-center gap-2">
+                                                <Icon name="points" className="w-5 h-5" />
+                                                🎵 Continuous by Points
+                                            </div>
+                                            <div className="text-xs opacity-75 mt-1">Auto-play specific difficulty levels (1pt, 2pt, 3pt, etc.)</div>
                                         </button>
                                         
                                         <button
@@ -2915,6 +3063,15 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         <PointsSelectionModal
                             onSelect={handlePointsSelectionForStudy}
                             onCancel={() => setShowPointsSelection(false)}
+                            availablePoints={availablePoints}
+                            theme={theme}
+                        />
+                    )}
+                    
+                    {showContinuousPointsSelection && (
+                        <ContinuousPointsSelectionModal
+                            onSelect={handleContinuousPointsSelectionForStudy}
+                            onCancel={() => setShowContinuousPointsSelection(false)}
                             availablePoints={availablePoints}
                             theme={theme}
                         />
