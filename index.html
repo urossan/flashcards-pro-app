@@ -123,6 +123,8 @@
                 if (this.isSupported) {
                     try {
                         window.speechSynthesis.cancel();
+                        // Double cancel to ensure it stops
+                        window.speechSynthesis.cancel();
                     } catch (error) {
                         // Silent fail
                     }
@@ -799,21 +801,50 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
         function MobileStudyCard({ card, isFlipped, onFlip }) {
             const { state: { theme, settings } } = useFlashCards();
             const cleanQuestion = card.question.replace(/^Q\d+\)\s*/, '');
+            const lastCardId = useRef(null);
+            
+            // Read question when new card appears (not flipped)
+            useEffect(() => {
+                // Only speak if this is a new card and we're showing the question side
+                if (card.id !== lastCardId.current && !isFlipped) {
+                    lastCardId.current = card.id;
+                    
+                    if (settings.speechEnabled && settings.autoReadQuestion) {
+                        // Small delay to ensure component is mounted and previous speech stopped
+                        const timer = setTimeout(() => {
+                            SpeechService.speak(cleanQuestion, settings);
+                        }, 300);
+                        return () => clearTimeout(timer);
+                    }
+                }
+            }, [card.id, isFlipped]); // Simplified dependencies
+            
+            // Cleanup on unmount
+            useEffect(() => {
+                return () => {
+                    SpeechService.stop();
+                };
+            }, []);
             
             const handleCardClick = () => {
                 SpeechService.stop();
+                
+                // Determine what to read BEFORE flipping
+                const willReadAnswer = !isFlipped && settings.autoReadAnswer;
+                const willReadQuestion = isFlipped && settings.autoReadQuestion;
+                
                 onFlip();
                 
-                // Speech after flip
-                setTimeout(() => {
-                    if (settings.speechEnabled) {
-                        if (isFlipped && settings.autoReadAnswer) {
+                // Speech after flip animation completes
+                if (settings.speechEnabled) {
+                    setTimeout(() => {
+                        if (willReadAnswer) {
                             SpeechService.speak(card.answer, settings);
-                        } else if (!isFlipped && settings.autoReadQuestion) {
+                        } else if (willReadQuestion) {
                             SpeechService.speak(cleanQuestion, settings);
                         }
-                    }
-                }, 500);
+                    }, 600);
+                }
             };
             
             return (
@@ -1174,7 +1205,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
 
         // Manual Study Mode - Fixed
         function MobileStudyMode({ cards, onComplete }) {
-            const { state: { theme } } = useFlashCards();
+            const { state: { theme, settings } } = useFlashCards();
             const [currentIndex, setCurrentIndex] = useState(0);
             const [isFlipped, setIsFlipped] = useState(false);
             const [startTime] = useState(Date.now());
@@ -1186,6 +1217,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 return cards.reduce((sum, card) => sum + (card.points || 1), 0);
             }, [cards]);
             
+            // Cleanup on unmount
             useEffect(() => {
                 return () => {
                     SpeechService.stop();
@@ -1198,8 +1230,9 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             
             const handleNavigate = (newIndex) => {
                 if (newIndex >= 0 && newIndex < cards.length) {
-                    setCurrentIndex(newIndex);
-                    setIsFlipped(false);
+                    SpeechService.stop(); // Stop any current speech
+                    setIsFlipped(false); // Reset to question side
+                    setCurrentIndex(newIndex); // This will trigger card change in MobileStudyCard
                 }
             };
             
@@ -2017,7 +2050,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                 <div className={`p-6 rounded-xl ${
                                     theme === 'dark' ? 'bg-gray-800' : 'bg-white'
                                 } text-center`}>
-                                    <Icon name="brain" className="w-12 h-12 mx-auto mb-4 text-blue-500" />
                                     <h3 className="text-lg font-semibold mb-2">Study Session</h3>
                                     <p className={`text-sm mb-4 ${
                                         theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
@@ -2052,6 +2084,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                         
                                         <button
                                             onClick={() => {
+                                                SpeechService.stop();
                                                 setStudyMode('manual');
                                                 // Apply point filter if selected
                                                 const cardsToStudy = studyPointFilter.length > 0
