@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1f2937">
-    <title>Flash Cards Pro v6.1</title>
+    <title>Flash Cards Pro v6.2</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -168,61 +168,39 @@
             }
         }
 
-        // Continuous Study Service for Auto-Play Mode
+        // Simplified Continuous Study Service - Direct Speech + Display Sync
         class ContinuousStudyService {
-            static queue = [];
-            static isProcessing = false;
-            static currentTimeout = null;
-            static onPhaseChange = null;
-            static onComplete = null;
+            static isRunning = false;
             static isPaused = false;
-            static settings = null;
+            static currentTimeout = null;
+            static onStop = null;
             
-            static start(onPhaseChange, onComplete, settings) {
-                this.onPhaseChange = onPhaseChange;
-                this.onComplete = onComplete;
-                this.settings = settings;
+            static async speakAndWait(text, settings, additionalPause = 0) {
+                return new Promise((resolve) => {
+                    if (!settings.speechEnabled || this.isPaused) {
+                        resolve();
+                        return;
+                    }
+                    
+                    // Speak the text
+                    SpeechService.speak(text, settings);
+                    
+                    // Calculate how long to wait
+                    const speechDuration = SpeechService.estimateSpeechDuration(text, settings.speechRate);
+                    const totalWait = speechDuration + additionalPause;
+                    
+                    this.currentTimeout = setTimeout(() => {
+                        if (!this.isPaused) {
+                            resolve();
+                        }
+                    }, totalWait);
+                });
+            }
+            
+            static start(onStopCallback) {
+                this.isRunning = true;
                 this.isPaused = false;
-                this.queue = [];
-                this.isProcessing = false;
-            }
-            
-            static addToQueue(text, pauseAfter = 1000, phase = null) {
-                this.queue.push({ text, pauseAfter, phase });
-                if (!this.isProcessing && !this.isPaused) {
-                    this.processQueue();
-                }
-            }
-            
-            static processQueue() {
-                if (this.isPaused || this.queue.length === 0) {
-                    if (this.queue.length === 0) {
-                        this.isProcessing = false;
-                        if (this.onComplete) this.onComplete();
-                    }
-                    return;
-                }
-                
-                this.isProcessing = true;
-                const { text, pauseAfter, phase } = this.queue.shift();
-                
-                // Notify phase change
-                if (this.onPhaseChange && phase) {
-                    this.onPhaseChange(phase);
-                }
-                
-                // Speak the text
-                SpeechService.speak(text, this.settings);
-                
-                // Calculate total wait time (speech duration + pause)
-                const speechDuration = SpeechService.estimateSpeechDuration(text, this.settings.speechRate);
-                const totalWaitTime = speechDuration + pauseAfter;
-                
-                this.currentTimeout = setTimeout(() => {
-                    if (!this.isPaused) {
-                        this.processQueue();
-                    }
-                }, totalWaitTime);
+                this.onStop = onStopCallback;
             }
             
             static pause() {
@@ -236,17 +214,18 @@
             
             static resume() {
                 this.isPaused = false;
-                this.processQueue();
             }
             
             static stop() {
-                this.isPaused = true;
-                this.isProcessing = false;
-                this.queue = [];
+                this.isRunning = false;
+                this.isPaused = false;
                 SpeechService.stop();
                 if (this.currentTimeout) {
                     clearTimeout(this.currentTimeout);
                     this.currentTimeout = null;
+                }
+                if (this.onStop) {
+                    this.onStop();
                 }
             }
         }
@@ -261,8 +240,8 @@
 
         // Storage Service
         class StorageService {
-            static STORAGE_KEY = 'flashcards-pro-v61-continuous';
-            static VERSION = '6.1';
+            static STORAGE_KEY = 'flashcards-pro-v62';
+            static VERSION = '6.2';
             
             static save(state) {
                 try {
@@ -1459,23 +1438,24 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             );
         }
 
-        // Continuous Auto-Play Study Mode
+        // Continuous Auto-Play Study Mode - Synchronized Speech + Display
         function ContinuousStudyMode({ cards, onComplete, onExit }) {
             const { state: { theme, settings } } = useFlashCards();
             const [currentIndex, setCurrentIndex] = useState(0);
             const [isPlaying, setIsPlaying] = useState(false);
             const [isPaused, setIsPaused] = useState(false);
-            const [phase, setPhase] = useState('ready'); // 'ready', 'intro', 'question', 'answer', 'transition'
+            const [phase, setPhase] = useState('ready'); // 'ready', 'intro', 'question', 'answer', 'complete'
+            const [displayContent, setDisplayContent] = useState('');
             const [startTime] = useState(Date.now());
             
             const currentCard = cards[currentIndex];
             const progress = ((currentIndex + 1) / cards.length) * 100;
             
-            // Settings for timing (in milliseconds)
-            const PAUSE_AFTER_POINTS = 1200;     // 1.2 seconds after "Question X, Y points"
+            // Timing settings (in milliseconds)
+            const PAUSE_AFTER_POINTS = 1500;     // 1.5 seconds after "Question X, Y points"
             const PAUSE_AFTER_QUESTION = 2500;   // 2.5 seconds after question
             const PAUSE_AFTER_ANSWER = 3000;     // 3 seconds after answer
-            const PAUSE_BETWEEN_CARDS = 1500;    // 1.5 seconds between cards
+            const PAUSE_BETWEEN_CARDS = 2000;    // 2 seconds between cards
             
             useEffect(() => {
                 return () => {
@@ -1483,94 +1463,90 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 };
             }, []);
             
-            const handlePhaseChange = (newPhase) => {
-                setPhase(newPhase);
-            };
-            
-            const handleComplete = () => {
-                setIsPlaying(false);
-                setIsPaused(false);
-                setPhase('complete');
-                
-                // Calculate session stats
-                const duration = Math.floor((Date.now() - startTime) / 1000);
-                const totalPoints = cards.reduce((sum, card) => sum + (card.points || 1), 0);
-                
-                setTimeout(() => {
-                    onComplete({ 
-                        correct: cards.length,
-                        incorrect: 0, 
-                        duration,
-                        totalPoints,
-                        mode: 'continuous'
-                    });
-                }, 2000); // Give time to hear "complete" message
-            };
-            
-            const startContinuousStudy = () => {
+            const startContinuousStudy = async () => {
                 setIsPlaying(true);
                 setIsPaused(false);
                 setCurrentIndex(0);
-                setPhase('intro');
                 
-                ContinuousStudyService.start(handlePhaseChange, handleComplete, settings);
-                playContinuousSequence(0);
+                ContinuousStudyService.start(() => {
+                    // This is called when study is stopped
+                    setIsPlaying(false);
+                    setIsPaused(false);
+                    setPhase('ready');
+                    setDisplayContent('');
+                });
+                
+                await runContinuousStudy();
             };
             
-            const playContinuousSequence = (startIndex) => {
-                let cardIndex = startIndex;
-                
-                const playNextCard = () => {
-                    if (cardIndex >= cards.length) {
-                        // All cards completed
-                        ContinuousStudyService.addToQueue("Study session complete! Well done!", 0, 'complete');
-                        return;
+            const runContinuousStudy = async () => {
+                try {
+                    for (let i = 0; i < cards.length; i++) {
+                        if (!ContinuousStudyService.isRunning || ContinuousStudyService.isPaused) {
+                            break;
+                        }
+                        
+                        const card = cards[i];
+                        const cleanQuestion = card.question.replace(/^Q\d+\)\s*/, '');
+                        
+                        // Update current index
+                        setCurrentIndex(i);
+                        
+                        // Phase 1: Announce question with points
+                        const introText = `Question ${i + 1}, ${card.points || 1} point${(card.points || 1) > 1 ? 's' : ''}`;
+                        setPhase('intro');
+                        setDisplayContent(introText);
+                        await ContinuousStudyService.speakAndWait(introText, settings, PAUSE_AFTER_POINTS);
+                        
+                        if (!ContinuousStudyService.isRunning) break;
+                        
+                        // Phase 2: Show and read question
+                        setPhase('question');
+                        setDisplayContent(cleanQuestion);
+                        await ContinuousStudyService.speakAndWait(cleanQuestion, settings, PAUSE_AFTER_QUESTION);
+                        
+                        if (!ContinuousStudyService.isRunning) break;
+                        
+                        // Phase 3: Show and read answer
+                        setPhase('answer');
+                        setDisplayContent(card.answer);
+                        await ContinuousStudyService.speakAndWait(card.answer, settings, PAUSE_AFTER_ANSWER);
+                        
+                        if (!ContinuousStudyService.isRunning) break;
+                        
+                        // Phase 4: Pause between cards (except for last card)
+                        if (i < cards.length - 1) {
+                            setPhase('transition');
+                            setDisplayContent('Moving to next question...');
+                            await new Promise(resolve => setTimeout(resolve, PAUSE_BETWEEN_CARDS));
+                        }
                     }
                     
-                    const card = cards[cardIndex];
-                    const cleanQuestion = card.question.replace(/^Q\d+\)\s*/, '');
-                    
-                    // Update current index
-                    setCurrentIndex(cardIndex);
-                    
-                    // Phase 1: Announce question number and points
-                    ContinuousStudyService.addToQueue(
-                        `Question ${cardIndex + 1}, ${card.points || 1} point${(card.points || 1) > 1 ? 's' : ''}`,
-                        PAUSE_AFTER_POINTS,
-                        'intro'
-                    );
-                    
-                    // Phase 2: Read the question
-                    ContinuousStudyService.addToQueue(
-                        cleanQuestion,
-                        PAUSE_AFTER_QUESTION,
-                        'question'
-                    );
-                    
-                    // Phase 3: Read the answer
-                    ContinuousStudyService.addToQueue(
-                        card.answer,
-                        PAUSE_AFTER_ANSWER,
-                        'answer'
-                    );
-                    
-                    // Phase 4: Transition pause and move to next
-                    if (cardIndex < cards.length - 1) {
-                        ContinuousStudyService.addToQueue(
-                            "", // Silent pause
-                            PAUSE_BETWEEN_CARDS,
-                            'transition'
-                        );
+                    // Study completed
+                    if (ContinuousStudyService.isRunning) {
+                        setPhase('complete');
+                        setDisplayContent('Study session complete! Well done!');
+                        await ContinuousStudyService.speakAndWait('Study session complete! Well done!', settings, 1000);
+                        
+                        // Calculate session stats
+                        const duration = Math.floor((Date.now() - startTime) / 1000);
+                        const totalPoints = cards.reduce((sum, card) => sum + (card.points || 1), 0);
+                        
+                        setTimeout(() => {
+                            onComplete({ 
+                                correct: cards.length,
+                                incorrect: 0, 
+                                duration,
+                                totalPoints,
+                                mode: 'continuous'
+                            });
+                        }, 2000);
                     }
                     
-                    cardIndex++;
-                    if (cardIndex < cards.length) {
-                        // Schedule next card
-                        setTimeout(() => playNextCard(), 100);
-                    }
-                };
-                
-                playNextCard();
+                } catch (error) {
+                    console.error('Continuous study error:', error);
+                    ContinuousStudyService.stop();
+                }
             };
             
             const pauseStudy = () => {
@@ -1581,6 +1557,8 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             const resumeStudy = () => {
                 setIsPaused(false);
                 ContinuousStudyService.resume();
+                // Continue from where we left off
+                runContinuousStudy();
             };
             
             const stopStudy = () => {
@@ -1589,6 +1567,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 setIsPaused(false);
                 setPhase('ready');
                 setCurrentIndex(0);
+                setDisplayContent('');
             };
             
             const getPhaseIcon = () => {
@@ -1604,12 +1583,23 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             
             const getPhaseText = () => {
                 switch (phase) {
-                    case 'intro': return `Question ${currentIndex + 1} • ${currentCard?.points || 1}pt`;
+                    case 'intro': return 'Announcing Question';
                     case 'question': return 'Reading Question';
                     case 'answer': return 'Reading Answer';
                     case 'transition': return 'Moving to Next...';
                     case 'complete': return 'Session Complete!';
                     default: return 'Ready to Start';
+                }
+            };
+            
+            const getPhaseColor = () => {
+                switch (phase) {
+                    case 'intro': return 'border-purple-500';
+                    case 'question': return 'border-blue-500';
+                    case 'answer': return 'border-green-500';
+                    case 'transition': return 'border-orange-500';
+                    case 'complete': return 'border-yellow-500';
+                    default: return theme === 'dark' ? 'border-gray-700' : 'border-gray-200';
                 }
             };
             
@@ -1637,7 +1627,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                     <div className="text-center">
                         <h2 className="text-2xl font-bold mb-2">🎵 Continuous Study Mode</h2>
                         <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Sit back and listen as all {cards.length} questions are read automatically
+                            Listen as all {cards.length} questions are read automatically with synchronized display
                         </p>
                     </div>
                     
@@ -1661,34 +1651,60 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         </div>
                     </div>
                     
-                    {/* Current Phase Display */}
-                    <div className={`p-6 rounded-xl text-center ${
+                    {/* Synchronized Display - Shows what's being read */}
+                    <div className={`p-6 rounded-xl ${
                         theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                    } border-2 ${
-                        isPlaying ? 'border-blue-500' : theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
-                    }`}>
-                        <div className="text-4xl mb-3 animate-pulse">
-                            {getPhaseIcon()}
+                    } border-2 ${getPhaseColor()} min-h-[250px] flex flex-col justify-center`}>
+                        <div className="text-center mb-4">
+                            <div className="text-4xl mb-2 animate-pulse">
+                                {getPhaseIcon()}
+                            </div>
+                            <h3 className="text-lg font-semibold mb-1">
+                                {getPhaseText()}
+                            </h3>
+                            {isPlaying && (
+                                <p className="text-sm text-gray-500">
+                                    {phase === 'intro' && `Question ${currentIndex + 1} • ${currentCard?.points || 1}pt`}
+                                    {phase === 'question' && 'Listen and read along'}
+                                    {phase === 'answer' && 'Answer being read aloud'}
+                                    {phase === 'transition' && 'Preparing next question...'}
+                                    {phase === 'complete' && 'All questions completed!'}
+                                </p>
+                            )}
                         </div>
-                        <h3 className="text-lg font-semibold mb-2">
-                            {getPhaseText()}
-                        </h3>
                         
-                        {currentCard && isPlaying && (
-                            <div className={`text-sm mt-4 p-3 rounded-lg ${
+                        {/* Content Display - Exactly what's being read */}
+                        {displayContent && isPlaying && (
+                            <div className={`p-4 rounded-lg ${
                                 theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'
+                            } border-l-4 ${
+                                phase === 'intro' ? 'border-purple-500' :
+                                phase === 'question' ? 'border-blue-500' :
+                                phase === 'answer' ? 'border-green-500' :
+                                phase === 'transition' ? 'border-orange-500' :
+                                'border-yellow-500'
                             }`}>
-                                {phase === 'question' && (
-                                    <p className="text-left">{currentCard.question.replace(/^Q\d+\)\s*/, '')}</p>
-                                )}
-                                {phase === 'answer' && (
-                                    <p className="text-left whitespace-pre-line">{currentCard.answer}</p>
-                                )}
-                                {phase === 'intro' && (
-                                    <p className="font-medium">
-                                        Question {currentIndex + 1} • {currentCard.points || 1} point{(currentCard.points || 1) > 1 ? 's' : ''}
-                                    </p>
-                                )}
+                                <div className={`${
+                                    phase === 'intro' ? 'text-center font-semibold text-lg' :
+                                    phase === 'transition' ? 'text-center italic' :
+                                    phase === 'complete' ? 'text-center font-bold text-lg' :
+                                    'text-left'
+                                } ${
+                                    phase === 'answer' ? 'whitespace-pre-line' : ''
+                                }`}>
+                                    {displayContent}
+                                </div>
+                            </div>
+                        )}
+                        
+                        {!isPlaying && (
+                            <div className="text-center">
+                                <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    Questions and answers will appear here as they're read aloud
+                                </p>
+                                <p className={`text-xs mt-2 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>
+                                    Perfect synchronization between speech and visual display
+                                </p>
                             </div>
                         )}
                     </div>
@@ -1701,7 +1717,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                 className="w-full py-4 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl hover:from-blue-600 hover:to-purple-600 font-medium text-lg flex items-center justify-center gap-2"
                             >
                                 <Icon name="study" className="w-5 h-5" />
-                                Start Auto-Play Study
+                                Start Synchronized Auto-Play
                             </button>
                         ) : (
                             <div className="grid grid-cols-2 gap-3">
@@ -1736,17 +1752,18 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         </button>
                     </div>
                     
-                    {/* Instructions */}
+                    {/* Enhanced Instructions */}
                     {!isPlaying && (
                         <div className={`p-4 rounded-xl ${
                             theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
                         }`}>
-                            <h4 className="font-semibold mb-2">How it works:</h4>
+                            <h4 className="font-semibold mb-2">✨ New Synchronized Experience:</h4>
                             <ul className="text-sm space-y-1 text-gray-600 dark:text-gray-400">
-                                <li>• Questions are announced with point values</li>
-                                <li>• Each question is read aloud with pauses</li>
-                                <li>• Answers follow automatically</li>
-                                <li>• Perfect for hands-free studying</li>
+                                <li>• 📢 <strong>Announcements</strong>: "Question X, Y points" displayed + spoken</li>
+                                <li>• ❓ <strong>Questions</strong>: Full text shown while being read aloud</li>
+                                <li>• 💡 <strong>Answers</strong>: Complete answers displayed + spoken</li>
+                                <li>• ⏭️ <strong>Transitions</strong>: Smooth progression with visual cues</li>
+                                <li>• 🎯 <strong>Perfect sync</strong>: See exactly what you're hearing</li>
                             </ul>
                         </div>
                     )}
@@ -2611,7 +2628,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                     <span className={`text-sm px-2 py-0.5 rounded-full ${
                                         theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
                                     }`}>
-                                        v6.1
+                                        v6.2
                                     </span>
                                 </h1>
                                 
