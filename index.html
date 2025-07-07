@@ -741,9 +741,8 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                     <div className="p-4" onClick={() => setShowActions(!showActions)}>
                         <div className="flex justify-between items-start mb-2">
                             <h4 className="font-medium text-base leading-tight pr-2 flex-1">{card.question}</h4>
-                            <span className={`text-xs px-2 py-1 rounded flex-shrink-0 flex items-center gap-1 ${getPointsColor(card.points || 1)}`}>
-                                <Icon name="points" className="w-3 h-3" />
-                                {card.points || 1}pt
+                            <span className={`text-sm px-2.5 py-1 rounded flex-shrink-0 font-bold ${getPointsColor(card.points || 1)}`}>
+                                {card.points || 1}
                             </span>
                         </div>
                         
@@ -833,10 +832,10 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                             
                             <div className="absolute top-4 right-4">
-                                <span className={`text-xs px-2 py-1 rounded-full opacity-50 ${
+                                <span className={`text-sm px-2.5 py-1 rounded-full font-bold ${
                                     theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
                                 }`}>
-                                    {card.points || 1}pt
+                                    {card.points || 1}
                                 </span>
                             </div>
                             
@@ -859,10 +858,10 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                             
                             <div className="absolute top-4 right-4">
-                                <span className={`text-xs px-2 py-1 rounded-full opacity-50 ${
+                                <span className={`text-sm px-2.5 py-1 rounded-full font-bold ${
                                     theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
                                 }`}>
-                                    {card.points || 1}pt
+                                    {card.points || 1}
                                 </span>
                             </div>
                             
@@ -1034,20 +1033,39 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
                             Auto-play: Points → Question → Answer with smooth transitions
                         </p>
-                        {settings.randomizeOrder && (
-                            <p className="text-xs text-green-500 mt-1">🎲 Randomized Order Enabled</p>
-                        )}
+                        {/* Status indicators */}
+                        <div className="flex items-center justify-center gap-3 mt-3">
+                            <div className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm ${
+                                settings.speechEnabled ? 'bg-green-500' : 'bg-red-500'
+                            } text-white text-xs font-medium`}>
+                                <span className="text-base">🔊</span>
+                                <span>Sound</span>
+                            </div>
+                            <div className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm ${
+                                settings.randomizeOrder ? 'bg-green-500' : 'bg-red-500'
+                            } text-white text-xs font-medium`}>
+                                <span className="text-base">🎲</span>
+                                <span>Random</span>
+                            </div>
+                        </div>
                     </div>
                     
-                    {/* Progress */}
+                    {/* Progress with current card points */}
                     <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
                         <div className="flex justify-between items-center mb-2">
                             <span className="text-sm font-medium">
                                 {isPlaying ? `Question ${currentIndex + 1} of ${cards.length}` : 'Ready to Start'}
                             </span>
-                            <span className="text-sm text-gray-500">
-                                {cards.reduce((sum, card) => sum + (card.points || 1), 0)}pt total
-                            </span>
+                            <div className="flex items-center gap-3">
+                                {currentCard && isPlaying && (
+                                    <span className={`text-sm px-2.5 py-1 rounded font-bold ${getPointsColor(currentCard.points || 1)}`}>
+                                        {currentCard.points || 1}
+                                    </span>
+                                )}
+                                <span className="text-sm text-gray-500">
+                                    {cards.reduce((sum, card) => sum + (card.points || 1), 0)}pt total
+                                </span>
+                            </div>
                         </div>
                         <div className={`h-3 rounded-full overflow-hidden ${
                             theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
@@ -1062,7 +1080,16 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                     {/* Display */}
                     <div className={`p-6 rounded-xl ${
                         theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                    } min-h-[250px] flex flex-col justify-center`}>
+                    } min-h-[250px] flex flex-col justify-center relative`}>
+                        {/* Current card points badge in corner */}
+                        {currentCard && isPlaying && (
+                            <div className="absolute top-4 right-4">
+                                <span className={`text-lg px-3 py-1.5 rounded-full font-bold ${getPointsColor(currentCard.points || 1)}`}>
+                                    {currentCard.points || 1}
+                                </span>
+                            </div>
+                        )}
+                        
                         <div className="text-center mb-4">
                             <div className="text-4xl mb-2">
                                 {phase === 'intro' ? '📢' : 
@@ -1212,8 +1239,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                             <span className="text-sm font-medium">
                                 Question {currentIndex + 1} of {cards.length}
                             </span>
-                            <div className="flex items-center gap-1">
-                                <Icon name="points" className="w-4 h-4 text-blue-500" />
+                            <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium">{totalPoints}pt total</span>
                             </div>
                         </div>
@@ -1371,7 +1397,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                     key={pt}
                                     type="button"
                                     onClick={() => setPoints(pt)}
-                                    className={`py-3 rounded-xl border transition-colors text-sm font-medium ${
+                                    className={`py-3 rounded-xl border transition-colors text-sm font-bold ${
                                         points === pt
                                             ? getPointsColor(pt) + ' border-transparent'
                                             : theme === 'dark'
@@ -1379,7 +1405,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                             : 'border-gray-300 hover:border-gray-400'
                                     }`}
                                 >
-                                    {pt}pt
+                                    {pt}
                                 </button>
                             ))}
                         </div>
@@ -1762,7 +1788,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                                                 : [...prev, pt]
                                                         );
                                                     }}
-                                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap flex items-center gap-1 ${
+                                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
                                                         selectedPoints.includes(pt)
                                                             ? getPointsColor(pt)
                                                             : theme === 'dark'
@@ -1770,8 +1796,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                                             : 'bg-gray-200 text-gray-700'
                                                     }`}
                                                 >
-                                                    <Icon name="points" className="w-3 h-3" />
-                                                    {pt}pt
+                                                    {pt}
                                                 </button>
                                             ))}
                                         </div>
@@ -1976,8 +2001,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                                             : 'bg-gray-200 text-gray-700'
                                                     }`}
                                                 >
-                                                    <Icon name="points" className="w-3 h-3" />
-                                                    {pt}pt
+                                                    {pt}
                                                     <span className="text-xs ml-1">({count})</span>
                                                 </button>
                                             );
@@ -2022,7 +2046,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                             <div className="absolute inset-0 bg-white opacity-10 transform translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
                                             <div className="relative flex items-center justify-center gap-2">
                                                 🎵 Continuous Auto-Play
-                                                {settings.randomizeOrder && ' 🎲'}
                                             </div>
                                             <div className="text-xs opacity-75 mt-1">Listen hands-free as questions & answers are read automatically</div>
                                         </button>
@@ -2064,9 +2087,8 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                             <div key={pt} className={`p-3 rounded-lg text-center ${
                                                 theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
                                             }`}>
-                                                <div className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1 mb-1 ${getPointsColor(pt)}`}>
-                                                    <Icon name="points" className="w-3 h-3" />
-                                                    {pt}pt
+                                                <div className={`text-lg font-bold px-3 py-1 rounded inline-block mb-1 ${getPointsColor(pt)}`}>
+                                                    {pt}
                                                 </div>
                                                 <div className="text-sm font-medium">{count} cards</div>
                                             </div>
@@ -2112,8 +2134,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                     <div className={`p-4 rounded-xl ${
                                         theme === 'dark' ? 'bg-gray-800' : 'bg-white'
                                     } text-center`}>
-                                        <div className="text-2xl font-bold text-yellow-500 flex items-center justify-center gap-1">
-                                            <Icon name="points" className="w-6 h-6" />
+                                        <div className="text-2xl font-bold text-yellow-500">
                                             {totalPoints}
                                         </div>
                                         <div className="text-sm text-gray-500">Total Points</div>
@@ -2150,9 +2171,8 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                             const percentage = (count / cards.length) * 100;
                                             return (
                                                 <div key={pt} className="flex items-center gap-3">
-                                                    <span className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${getPointsColor(pt)}`}>
-                                                        <Icon name="points" className="w-3 h-3" />
-                                                        {pt}pt
+                                                    <span className={`text-sm px-2.5 py-1 rounded font-bold ${getPointsColor(pt)}`}>
+                                                        {pt}
                                                     </span>
                                                     <div className="flex-1">
                                                         <div className={`h-2 rounded-full overflow-hidden ${
