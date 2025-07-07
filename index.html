@@ -240,8 +240,8 @@
 
         // Storage Service
         class StorageService {
-            static STORAGE_KEY = 'flashcards-pro-v62';
-            static VERSION = '6.2';
+            static STORAGE_KEY = 'flashcards-pro-v61';
+            static VERSION = '6.1';
             
             static save(state) {
                 try {
@@ -1451,11 +1451,11 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             const currentCard = cards[currentIndex];
             const progress = ((currentIndex + 1) / cards.length) * 100;
             
-            // Timing settings (in milliseconds)
-            const PAUSE_AFTER_POINTS = 1500;     // 1.5 seconds after "Question X, Y points"
-            const PAUSE_AFTER_QUESTION = 2500;   // 2.5 seconds after question
-            const PAUSE_AFTER_ANSWER = 3000;     // 3 seconds after answer
-            const PAUSE_BETWEEN_CARDS = 2000;    // 2 seconds between cards
+            // Timing settings (in milliseconds) - Streamlined for faster flow
+            const PAUSE_AFTER_POINTS = 800;      // 0.8 seconds after "6 points"
+            const PAUSE_AFTER_QUESTION = 1000;   // 1 second after question
+            const PAUSE_AFTER_ANSWER = 1500;     // 1.5 seconds after answer
+            const PAUSE_BETWEEN_CARDS = 1200;    // 1.2 seconds between question-answer pairs
             
             useEffect(() => {
                 return () => {
@@ -1492,11 +1492,11 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         // Update current index
                         setCurrentIndex(i);
                         
-                        // Phase 1: Announce question with points
-                        const introText = `Question ${i + 1}, ${card.points || 1} point${(card.points || 1) > 1 ? 's' : ''}`;
+                        // Phase 1: Announce just the points (no question number)
+                        const pointsText = `${card.points || 1} point${(card.points || 1) > 1 ? 's' : ''}`;
                         setPhase('intro');
-                        setDisplayContent(introText);
-                        await ContinuousStudyService.speakAndWait(introText, settings, PAUSE_AFTER_POINTS);
+                        setDisplayContent(pointsText);
+                        await ContinuousStudyService.speakAndWait(pointsText, settings, PAUSE_AFTER_POINTS);
                         
                         if (!ContinuousStudyService.isRunning) break;
                         
@@ -1514,10 +1514,10 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         
                         if (!ContinuousStudyService.isRunning) break;
                         
-                        // Phase 4: Pause between cards (except for last card)
+                        // Phase 4: Brief pause between cards (except for last card)
                         if (i < cards.length - 1) {
                             setPhase('transition');
-                            setDisplayContent('Moving to next question...');
+                            setDisplayContent('Next question...');
                             await new Promise(resolve => setTimeout(resolve, PAUSE_BETWEEN_CARDS));
                         }
                     }
@@ -1583,10 +1583,10 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             
             const getPhaseText = () => {
                 switch (phase) {
-                    case 'intro': return 'Announcing Question';
+                    case 'intro': return 'Announcing Points';
                     case 'question': return 'Reading Question';
                     case 'answer': return 'Reading Answer';
-                    case 'transition': return 'Moving to Next...';
+                    case 'transition': return 'Next Question...';
                     case 'complete': return 'Session Complete!';
                     default: return 'Ready to Start';
                 }
@@ -1627,7 +1627,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                     <div className="text-center">
                         <h2 className="text-2xl font-bold mb-2">🎵 Continuous Study Mode</h2>
                         <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Listen as all {cards.length} questions are read automatically with synchronized display
+                            Streamlined auto-play: Points → Question → Answer with quick transitions
                         </p>
                     </div>
                     
@@ -1664,10 +1664,10 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                             </h3>
                             {isPlaying && (
                                 <p className="text-sm text-gray-500">
-                                    {phase === 'intro' && `Question ${currentIndex + 1} • ${currentCard?.points || 1}pt`}
+                                    {phase === 'intro' && `${currentCard?.points || 1}pt question`}
                                     {phase === 'question' && 'Listen and read along'}
                                     {phase === 'answer' && 'Answer being read aloud'}
-                                    {phase === 'transition' && 'Preparing next question...'}
+                                    {phase === 'transition' && 'Preparing next...'}
                                     {phase === 'complete' && 'All questions completed!'}
                                 </p>
                             )}
@@ -1717,7 +1717,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                 className="w-full py-4 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl hover:from-blue-600 hover:to-purple-600 font-medium text-lg flex items-center justify-center gap-2"
                             >
                                 <Icon name="study" className="w-5 h-5" />
-                                Start Synchronized Auto-Play
+                                Start Streamlined Auto-Play
                             </button>
                         ) : (
                             <div className="grid grid-cols-2 gap-3">
@@ -1757,13 +1757,13 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         <div className={`p-4 rounded-xl ${
                             theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
                         }`}>
-                            <h4 className="font-semibold mb-2">✨ New Synchronized Experience:</h4>
+                            <h4 className="font-semibold mb-2">✨ Streamlined Auto-Play Flow:</h4>
                             <ul className="text-sm space-y-1 text-gray-600 dark:text-gray-400">
-                                <li>• 📢 <strong>Announcements</strong>: "Question X, Y points" displayed + spoken</li>
-                                <li>• ❓ <strong>Questions</strong>: Full text shown while being read aloud</li>
-                                <li>• 💡 <strong>Answers</strong>: Complete answers displayed + spoken</li>
-                                <li>• ⏭️ <strong>Transitions</strong>: Smooth progression with visual cues</li>
-                                <li>• 🎯 <strong>Perfect sync</strong>: See exactly what you're hearing</li>
+                                <li>• 📢 <strong>Points</strong>: "6 points" (no question numbers)</li>
+                                <li>• ❓ <strong>Question</strong>: Full text shown + read aloud</li>
+                                <li>• 💡 <strong>Answer</strong>: Complete answer displayed + spoken</li>
+                                <li>• ⏭️ <strong>Flow</strong>: Quick transitions, minimal gaps</li>
+                                <li>• 🎯 <strong>Efficient</strong>: Faster pace, perfect sync</li>
                             </ul>
                         </div>
                     )}
@@ -2495,7 +2495,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             const [isStudying, setIsStudying] = useState(false);
             const [showMenu, setShowMenu] = useState(false);
             const [showPointsSelection, setShowPointsSelection] = useState(false);
-            const [showContinuousPointsSelection, setShowContinuousPointsSelection] = useState(false);
             const [studyCards, setStudyCards] = useState([]);
             const [studyMode, setStudyMode] = useState('manual'); // 'manual', 'continuous'
             
@@ -2591,14 +2590,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 setStudyCards(cardsToStudy);
                 setShowPointsSelection(false);
                 setStudyMode('manual');
-                setIsStudying(true);
-            };
-            
-            const handleContinuousPointsSelectionForStudy = (points) => {
-                const cardsToStudy = cards.filter(card => points.includes(card.points || 1));
-                setStudyCards(cardsToStudy);
-                setShowContinuousPointsSelection(false);
-                setStudyMode('continuous');
                 setIsStudying(true);
             };
             
@@ -2883,22 +2874,9 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                         >
                                             <div className="absolute inset-0 bg-white opacity-10 transform translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
                                             <div className="relative flex items-center justify-center gap-2">
-                                                🎵 Continuous Auto-Play (All)
+                                                🎵 Continuous Auto-Play
                                             </div>
-                                            <div className="text-xs opacity-75 mt-1">Listen hands-free to all {filteredCards.length} questions automatically</div>
-                                        </button>
-                                        
-                                        <button
-                                            onClick={() => setShowContinuousPointsSelection(true)}
-                                            disabled={filteredCards.length === 0}
-                                            className="w-full py-4 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium relative overflow-hidden group"
-                                        >
-                                            <div className="absolute inset-0 bg-white opacity-10 transform translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
-                                            <div className="relative flex items-center justify-center gap-2">
-                                                <Icon name="points" className="w-5 h-5" />
-                                                🎵 Continuous by Points
-                                            </div>
-                                            <div className="text-xs opacity-75 mt-1">Auto-play specific difficulty levels (1pt, 2pt, 3pt, etc.)</div>
+                                            <div className="text-xs opacity-75 mt-1">Listen hands-free as questions & answers are read automatically</div>
                                         </button>
                                         
                                         <button
@@ -3080,15 +3058,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         <PointsSelectionModal
                             onSelect={handlePointsSelectionForStudy}
                             onCancel={() => setShowPointsSelection(false)}
-                            availablePoints={availablePoints}
-                            theme={theme}
-                        />
-                    )}
-                    
-                    {showContinuousPointsSelection && (
-                        <ContinuousPointsSelectionModal
-                            onSelect={handleContinuousPointsSelectionForStudy}
-                            onCancel={() => setShowContinuousPointsSelection(false)}
                             availablePoints={availablePoints}
                             theme={theme}
                         />
