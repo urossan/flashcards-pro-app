@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1f2937">
-    <title>Flash Cards Pro v6.2</title>
-    <link rel="manifest" href="manifest.json">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+    <title>Flash Cards Pro v6.3</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -24,9 +22,7 @@
             overflow-x: hidden; 
             font-family: system-ui, -apple-system, sans-serif;
         }
-        #root {
-            min-height: 100vh;
-        }
+        #root { min-height: 100vh; }
         .perspective-1000 { perspective: 1000px; }
         .transform-style-preserve-3d { transform-style: preserve-3d; }
         .backface-hidden { backface-visibility: hidden; }
@@ -38,49 +34,8 @@
             overflow: hidden; 
         }
         button:active { transform: scale(0.98); }
-        
-        /* Enhanced Animation Keyframes */
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px) translateX(-50%);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0) translateX(-50%);
-            }
-        }
-        
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 0.9;
-            }
-            50% {
-                opacity: 0.7;
-            }
-        }
-        
-        @keyframes bounce {
-            0%, 20%, 53%, 80%, 100% {
-                transform: translate3d(0,0,0);
-            }
-            40%, 43% {
-                transform: translate3d(0,-8px,0);
-            }
-            70% {
-                transform: translate3d(0,-4px,0);
-            }
-            90% {
-                transform: translate3d(0,-2px,0);
-            }
-        }
-        
-        .animate-bounce {
-            animation: bounce 1s infinite;
-        }
-        
-        @media screen and (max-width: 768px) { 
-            input, textarea, select { font-size: 16px !important; } 
+        @media (max-width: 768px) { 
+            input, textarea, select, button { font-size: 16px !important; min-height: 44px; } 
         }
     </style>
 </head>
@@ -90,85 +45,84 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useCallback, createContext, useContext, useRef } = React;
 
-        // Simple Icons
+        // Icons
         const Icon = ({ name, className = "w-5 h-5" }) => {
             const icons = {
                 search: "🔍", plus: "➕", moon: "🌙", sun: "☀️", menu: "☰",
                 cards: "🎴", study: "📚", stats: "📊", edit: "✏️", delete: "🗑️",
                 check: "✅", x: "❌", clock: "⏰", volume: "🔊", brain: "🧠",
-                zap: "⚡", target: "🎯", trend: "📈", points: "🏆"
+                points: "🏆", loading: "⏳"
             };
-            
             return React.createElement('span', {
                 className: `inline-block ${className}`,
                 style: { fontSize: '1.2em' }
             }, icons[name] || "📝");
         };
 
-        // Enhanced Text-to-Speech Service
+        // Speech Service - Fixed with better error handling
         class SpeechService {
             static currentUtterance = null;
             static isPlaying = false;
+            static isSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
             
             static speak(text, settings = {}) {
-                if (!('speechSynthesis' in window) || !settings.speechEnabled) return;
+                if (!this.isSupported || !settings.speechEnabled || !text?.trim()) return Promise.resolve();
                 
-                // Always cancel any ongoing speech first
                 this.stop();
                 
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.rate = settings.speechRate || 1.0;
-                utterance.volume = 0.8;
-                
-                // Use selected voice if available
-                if (settings.speechVoice) {
-                    const voices = window.speechSynthesis.getVoices();
-                    const selectedVoice = voices.find(voice => voice.name === settings.speechVoice);
-                    if (selectedVoice) {
-                        utterance.voice = selectedVoice;
+                return new Promise((resolve) => {
+                    try {
+                        const utterance = new SpeechSynthesisUtterance(text.trim());
+                        utterance.rate = Math.max(0.1, Math.min(10, settings.speechRate || 1.0));
+                        utterance.volume = 0.8;
+                        
+                        this.currentUtterance = utterance;
+                        this.isPlaying = true;
+                        
+                        utterance.onend = () => {
+                            this.currentUtterance = null;
+                            this.isPlaying = false;
+                            resolve();
+                        };
+                        
+                        utterance.onerror = () => {
+                            this.currentUtterance = null;
+                            this.isPlaying = false;
+                            resolve();
+                        };
+                        
+                        window.speechSynthesis.speak(utterance);
+                        
+                        // Fallback timeout
+                        setTimeout(() => {
+                            if (this.currentUtterance === utterance) {
+                                this.stop();
+                                resolve();
+                            }
+                        }, text.length * 100 + 5000);
+                        
+                    } catch (error) {
+                        this.currentUtterance = null;
+                        this.isPlaying = false;
+                        resolve();
                     }
-                }
-                
-                // Track the current utterance and state
-                this.currentUtterance = utterance;
-                this.isPlaying = true;
-                
-                // Handle speech events
-                utterance.onend = () => {
-                    this.currentUtterance = null;
-                    this.isPlaying = false;
-                };
-                
-                utterance.onerror = () => {
-                    this.currentUtterance = null;
-                    this.isPlaying = false;
-                };
-                
-                utterance.onstart = () => {
-                    this.isPlaying = true;
-                };
-                
-                window.speechSynthesis.speak(utterance);
+                });
             }
             
             static stop() {
-                if ('speechSynthesis' in window) {
-                    window.speechSynthesis.cancel();
+                if (this.isSupported) {
+                    try {
+                        window.speechSynthesis.cancel();
+                    } catch (error) {
+                        // Silent fail
+                    }
                     this.currentUtterance = null;
                     this.isPlaying = false;
                 }
             }
-            
-            static estimateSpeechDuration(text, rate = 1.0) {
-                // Rough estimate: ~150 words per minute at normal rate
-                const words = text.split(' ').length;
-                const baseWPM = 150;
-                const adjustedWPM = baseWPM * rate;
-                return (words / adjustedWPM) * 60 * 1000; // Convert to milliseconds
-            }
         }
 
-        // Simplified Continuous Study Service - Direct Speech + Display Sync
+        // Continuous Study Service - Fixed
         class ContinuousStudyService {
             static isRunning = false;
             static isPaused = false;
@@ -176,25 +130,22 @@
             static onStop = null;
             
             static async speakAndWait(text, settings, additionalPause = 0) {
-                return new Promise((resolve) => {
-                    if (!settings.speechEnabled || this.isPaused) {
-                        resolve();
-                        return;
+                if (!this.isRunning || this.isPaused) return;
+                
+                try {
+                    await SpeechService.speak(text, settings);
+                    if (!this.isRunning || this.isPaused) return;
+                    
+                    if (additionalPause > 0) {
+                        await new Promise(resolve => {
+                            this.currentTimeout = setTimeout(() => {
+                                if (!this.isPaused) resolve();
+                            }, additionalPause);
+                        });
                     }
-                    
-                    // Speak the text
-                    SpeechService.speak(text, settings);
-                    
-                    // Calculate how long to wait
-                    const speechDuration = SpeechService.estimateSpeechDuration(text, settings.speechRate);
-                    const totalWait = speechDuration + additionalPause;
-                    
-                    this.currentTimeout = setTimeout(() => {
-                        if (!this.isPaused) {
-                            resolve();
-                        }
-                    }, totalWait);
-                });
+                } catch (error) {
+                    console.warn('Speech error:', error);
+                }
             }
             
             static start(onStopCallback) {
@@ -227,6 +178,7 @@
                 if (this.onStop) {
                     this.onStop();
                 }
+                this.onStop = null;
             }
         }
 
@@ -238,21 +190,23 @@
             return context;
         };
 
-        // Storage Service
+        // Storage Service - Fixed
         class StorageService {
-            static STORAGE_KEY = 'flashcards-pro-v61';
-            static VERSION = '6.1';
+            static STORAGE_KEY = 'flashcards-pro-v63';
+            static VERSION = '6.3';
             
             static save(state) {
                 try {
                     const data = { 
                         ...state, 
                         categories: Array.from(state.categories),
-                        version: this.VERSION 
+                        version: this.VERSION
                     };
                     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
+                    return true;
                 } catch (error) {
                     console.error('Failed to save data:', error);
+                    return false;
                 }
             }
             
@@ -269,48 +223,57 @@
             }
             
             static exportData(state) {
-                const data = {
-                    version: this.VERSION,
-                    exported: new Date().toISOString(),
-                    ...state,
-                    categories: Array.from(state.categories),
-                };
-                
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `flashcards-v${this.VERSION}-${new Date().toISOString().split('T')[0]}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
+                try {
+                    const data = {
+                        version: this.VERSION,
+                        exported: new Date().toISOString(),
+                        ...state,
+                        categories: Array.from(state.categories),
+                    };
+                    
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `flashcards-v${this.VERSION}-${new Date().toISOString().split('T')[0]}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    return true;
+                } catch (error) {
+                    console.error('Export failed:', error);
+                    return false;
+                }
             }
             
             static async importData(file, onSuccess, onError) {
                 try {
+                    if (!file) {
+                        onError('No file selected');
+                        return;
+                    }
+                    
                     const text = await file.text();
                     
-                    // Try to parse as JSON first
-                    let data;
+                    // Try JSON first
                     try {
-                        data = JSON.parse(text);
+                        const data = JSON.parse(text);
                         if (data.cards && Array.isArray(data.cards)) {
                             onSuccess(data);
                             return;
                         }
                     } catch (e) {
-                        // Not JSON, try parsing as Q&A text format
+                        // Try Q&A format
                     }
                     
                     // Parse Q&A text format
                     const cards = this.parseQAText(text);
                     if (cards.length > 0) {
-                        const importData = {
+                        onSuccess({
                             cards,
-                            categories: new Set(['Theory Questions']),
+                            categories: new Set(['Crane Questions']),
                             studySessions: [],
                             cardProgress: {},
-                        };
-                        onSuccess(importData);
+                        });
                     } else {
                         onError('No valid questions found in file');
                     }
@@ -326,28 +289,23 @@
                 let currentAnswer = '';
                 let isAnswer = false;
                 let questionNumber = 1;
-                let currentPoints = 1;
                 
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i].trim();
                     
-                    // Check if this is a question line (starts with Q followed by number)
                     if (line.match(/^Q\d+\)/)) {
-                        // Save previous card if exists
+                        // Save previous card
                         if (currentQuestion && currentAnswer) {
-                            // Extract points from the complete question text before saving
-                            const fullQuestionPoints = currentQuestion.match(/\((\d+)pt\)/);
-                            if (fullQuestionPoints) {
-                                currentPoints = parseInt(fullQuestionPoints[1]);
-                            }
+                            const pointsMatch = currentQuestion.match(/\((\d+)pt\)/);
+                            const points = pointsMatch ? parseInt(pointsMatch[1]) : 1;
                             
                             cards.push({
                                 id: questionNumber.toString(),
                                 question: currentQuestion.replace(/\(\d+pt\)/, '').trim(),
                                 answer: currentAnswer.trim(),
-                                category: 'Theory Questions',
+                                category: 'Crane Questions',
                                 tags: [],
-                                points: currentPoints,
+                                points: points,
                                 media: [],
                                 created: new Date().toISOString(),
                                 lastStudied: null,
@@ -362,26 +320,15 @@
                             questionNumber++;
                         }
                         
-                        // Start new question
                         currentQuestion = line;
                         currentAnswer = '';
                         isAnswer = false;
-                        currentPoints = 1; // Reset to default
                     } else if (line.startsWith('Answer:')) {
                         isAnswer = true;
                         currentAnswer = line.replace('Answer:', '').trim();
                     } else if (line.length > 0) {
-                        if (!isAnswer && currentQuestion && !line.match(/^Q\d+\)/)) {
-                            // Check if this line contains points notation
-                            const pointsMatch = line.match(/\((\d+)pt\)/);
-                            if (pointsMatch || currentQuestion.includes('?') || currentQuestion.includes(' and ')) {
-                                // This is still part of the question
-                                currentQuestion += (currentQuestion ? '\n' : '') + line;
-                            } else {
-                                // This might be the start of an answer without "Answer:" prefix
-                                isAnswer = true;
-                                currentAnswer = line;
-                            }
+                        if (!isAnswer && currentQuestion) {
+                            currentQuestion += (currentQuestion ? '\n' : '') + line;
                         } else if (isAnswer) {
                             currentAnswer += (currentAnswer ? '\n' : '') + line;
                         } else {
@@ -390,21 +337,18 @@
                     }
                 }
                 
-                // Don't forget the last card
+                // Last card
                 if (currentQuestion && currentAnswer) {
-                    // Extract points from the complete question text
-                    const fullQuestionPoints = currentQuestion.match(/\((\d+)pt\)/);
-                    if (fullQuestionPoints) {
-                        currentPoints = parseInt(fullQuestionPoints[1]);
-                    }
+                    const pointsMatch = currentQuestion.match(/\((\d+)pt\)/);
+                    const points = pointsMatch ? parseInt(pointsMatch[1]) : 1;
                     
                     cards.push({
                         id: questionNumber.toString(),
                         question: currentQuestion.replace(/\(\d+pt\)/, '').trim(),
                         answer: currentAnswer.trim(),
-                        category: 'Theory Questions',
+                        category: 'Crane Questions',
                         tags: [],
-                        points: currentPoints,
+                        points: points,
                         media: [],
                         created: new Date().toISOString(),
                         lastStudied: null,
@@ -422,21 +366,9 @@
             }
         }
 
-        // Parse points from question text
-        const parsePointsFromQuestion = (questionText) => {
-            const match = questionText.match(/\((\d+)pt\)/);
-            return match ? parseInt(match[1]) : 1;
-        };
-
-        // Remove points notation from question text
-        const cleanQuestionText = (questionText) => {
-            return questionText.replace(/\(\d+pt\)/, '').trim();
-        };
-
-        // Card Data - Parse from the new format with points
+        // Default cards - ALL 78 questions from the document
         const createDefaultCards = () => {
-            const rawData = `
-Q1)Explain why MUST there be a safe system of work.(3pt)
+            const rawData = `Q1)Explain why MUST there be a safe system of work.(3pt)
 Answer: It is a LEGAL requirement under the HASWA 1974.
 
 Q2)a) State the legislation and the regulation therein that refers to the stability of cranes and b) Which regulation states the requirement for all lifting operations to be properly planned?(2pt)
@@ -758,9 +690,9 @@ b) What is the maximum lifting capacity when free on wheels (FOW)
 c) What the maximum hook height where a load can be lifted
 d) What is the maximum lifting capacity when the hook is at a height of 8m and the boom at an angle of 4Sdegrees?
 Answer: a) 3500 kg
-ab) 0kg
-ac) 10m
-ad) 1000kg
+b) 0kg
+c) 10m
+d) 1000kg
 
 Q74)What does the helth and safety at work act require employers to do regards spcificaly to plant?(3pt)
 Answer: Provide and maintain plant that is safe and without risk to health so far as is resonably practicable.
@@ -775,8 +707,7 @@ Q77) What is the main aim of HASWA 1974 ? (2pt)
 Answer: To create a safe system of work.
 
 Q78) What is a load radious indicator?(1pt)
-Answer: A divice fitted to a crane that shows the radius at witch the crane is operating and is coresponding SWL (WLL)
-            `;
+Answer: A divice fitted to a crane that shows the radius at witch the crane is operating and is coresponding SWL (WLL)`;
             
             return StorageService.parseQAText(rawData);
         };
@@ -788,7 +719,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             return 'bg-red-500 text-white';
         };
 
-        // Mobile Card Component
+        // Card Component
         function MobileCardItem({ card, onEdit, onDelete, onStudy }) {
             const { state: { theme } } = useFlashCards();
             const [showActions, setShowActions] = useState(false);
@@ -820,19 +751,10 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                     {card.category}
                                 </span>
                             )}
-                            {card.tags.slice(0, 2).map(tag => (
-                                <span key={tag} className={`text-xs px-2 py-1 rounded ${
-                                    theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'
-                                }`}>
-                                    {tag}
-                                </span>
-                            ))}
                         </div>
                     </div>
                     
-                    <div className={`overflow-hidden transition-all duration-300 ${
-                        showActions ? 'max-h-16' : 'max-h-0'
-                    }`}>
+                    {showActions && (
                         <div className={`flex border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                             <button
                                 onClick={(e) => { e.stopPropagation(); onStudy(); }}
@@ -859,109 +781,47 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                 Delete
                             </button>
                         </div>
-                    </div>
+                    )}
                 </div>
             );
         }
 
-        // Mobile Study Card with Fullscreen
-        function MobileStudyCard({ card, isFlipped, onFlip, isFullscreen, onToggleFullscreen }) {
+        // Study Card Component - Fixed
+        function MobileStudyCard({ card, isFlipped, onFlip }) {
             const { state: { theme, settings } } = useFlashCards();
-            const speechTimeoutRef = useRef(null);
-            const lastCardIdRef = useRef(null);
-            const lastFlippedRef = useRef(null);
-            
-            // Clean question text by removing Q1), Q2), etc.
             const cleanQuestion = card.question.replace(/^Q\d+\)\s*/, '');
             
-            // Clear speech function
-            const clearSpeech = useCallback(() => {
-                SpeechService.stop();
-                if (speechTimeoutRef.current) {
-                    clearTimeout(speechTimeoutRef.current);
-                    speechTimeoutRef.current = null;
-                }
-            }, []);
-            
-            // Speech effect
-            useEffect(() => {
-                clearSpeech();
-                
-                if (!settings.speechEnabled) return;
-                
-                const isCardChange = lastCardIdRef.current !== card.id;
-                const isFlipChange = lastFlippedRef.current !== isFlipped;
-                
-                lastCardIdRef.current = card.id;
-                lastFlippedRef.current = isFlipped;
-                
-                if (isCardChange) {
-                    if (settings.autoReadQuestion) {
-                        speechTimeoutRef.current = setTimeout(() => {
-                            if (lastCardIdRef.current === card.id && !isFlipped) {
-                                SpeechService.speak(cleanQuestion, settings);
-                            }
-                            speechTimeoutRef.current = null;
-                        }, 300);
-                    }
-                    return;
-                }
-                
-                if (isFlipChange) {
-                    const delay = 500;
-                    speechTimeoutRef.current = setTimeout(() => {
-                        if (lastCardIdRef.current === card.id && lastFlippedRef.current === isFlipped) {
-                            if (isFlipped && settings.autoReadAnswer) {
-                                SpeechService.speak(card.answer, settings);
-                            } else if (!isFlipped && settings.autoReadQuestion) {
-                                SpeechService.speak(cleanQuestion, settings);
-                            }
-                        }
-                        speechTimeoutRef.current = null;
-                    }, delay);
-                }
-            }, [card.id, isFlipped, settings.speechEnabled, settings.autoReadQuestion, settings.autoReadAnswer, clearSpeech, cleanQuestion]);
-            
-            useEffect(() => {
-                return () => {
-                    clearSpeech();
-                };
-            }, [clearSpeech]);
-            
             const handleCardClick = () => {
-                clearSpeech();
+                SpeechService.stop();
                 onFlip();
+                
+                // Speech after flip
+                setTimeout(() => {
+                    if (settings.speechEnabled) {
+                        if (isFlipped && settings.autoReadAnswer) {
+                            SpeechService.speak(card.answer, settings);
+                        } else if (!isFlipped && settings.autoReadQuestion) {
+                            SpeechService.speak(cleanQuestion, settings);
+                        }
+                    }
+                }, 500);
             };
             
             return (
-                <div className={`relative w-full ${isFullscreen ? 'h-screen' : 'h-[28rem]'} perspective-1000`}>
+                <div className="relative w-full h-[28rem] perspective-1000">
                     <div 
                         className={`relative w-full h-full transition-transform duration-500 transform-style-preserve-3d cursor-pointer ${
                             isFlipped ? 'rotate-y-180' : ''
                         }`}
                         onClick={handleCardClick}
                     >
+                        {/* Question Side */}
                         <div className={`absolute inset-0 backface-hidden rounded-2xl p-8 flex flex-col ${
                             theme === 'dark' 
                                 ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
                                 : 'bg-gradient-to-br from-white to-gray-100'
                         } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                             
-                            <div className="absolute top-4 left-4">
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onToggleFullscreen();
-                                    }}
-                                    className={`p-2 rounded-lg ${
-                                        theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
-                                    }`}
-                                >
-                                    {isFullscreen ? '↙️' : '↗️'}
-                                </button>
-                            </div>
-                            
-                            {/* Subtle points badge */}
                             <div className="absolute top-4 right-4">
                                 <span className={`text-xs px-2 py-1 rounded-full opacity-50 ${
                                     theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
@@ -972,7 +832,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                             
                             <div className="flex-1 overflow-y-auto px-2 py-4 flex items-center justify-center">
                                 <div className="text-center w-full">
-                                    <h2 className={`${isFullscreen ? 'text-2xl' : 'text-lg'} font-medium leading-relaxed`}>{cleanQuestion}</h2>
+                                    <h2 className="text-lg font-medium leading-relaxed">{cleanQuestion}</h2>
                                 </div>
                             </div>
                             
@@ -981,27 +841,13 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                             </div>
                         </div>
                         
+                        {/* Answer Side */}
                         <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-2xl p-8 flex flex-col ${
                             theme === 'dark' 
                                 ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
                                 : 'bg-gradient-to-br from-blue-50 to-blue-100'
                         } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
                             
-                            <div className="absolute top-4 left-4">
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onToggleFullscreen();
-                                    }}
-                                    className={`p-2 rounded-lg ${
-                                        theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
-                                    }`}
-                                >
-                                    {isFullscreen ? '↙️' : '↗️'}
-                                </button>
-                            </div>
-                            
-                            {/* Subtle points badge */}
                             <div className="absolute top-4 right-4">
                                 <span className={`text-xs px-2 py-1 rounded-full opacity-50 ${
                                     theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
@@ -1012,7 +858,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                             
                             <div className="flex-1 overflow-y-auto px-2 py-4 flex items-start justify-center">
                                 <div className="text-center w-full">
-                                    <h2 className={`${isFullscreen ? 'text-2xl' : 'text-lg'} font-medium leading-relaxed whitespace-pre-line`}>{card.answer}</h2>
+                                    <h2 className="text-lg font-medium leading-relaxed whitespace-pre-line">{card.answer}</h2>
                                 </div>
                             </div>
                             
@@ -1025,437 +871,18 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             );
         }
 
-        // Fullscreen Study Mode with Enhanced Animations and Gestures
-        function FullscreenStudyMode({ cards, currentIndex, isFlipped, onFlip, onNavigate, onExit }) {
-            const { state: { theme, settings } } = useFlashCards();
-            const touchStartRef = useRef({ x: 0, y: 0 });
-            const touchEndRef = useRef({ x: 0, y: 0 });
-            const [showHints, setShowHints] = useState(true);
-            const [slideDirection, setSlideDirection] = useState('');
-            const [isSliding, setIsSliding] = useState(false);
-            const [animationPhase, setAnimationPhase] = useState('idle'); // 'idle', 'slide-out', 'slide-in'
-            const [isTransitioning, setIsTransitioning] = useState(false); // For fade transition
-            const [dragOffset, setDragOffset] = useState(0); // For peek animation
-            const [isDragging, setIsDragging] = useState(false);
-            
-            const currentCard = cards[currentIndex];
-            const hasNext = currentIndex < cards.length - 1;
-            const hasPrev = currentIndex > 0;
-            const nextCard = hasNext ? cards[currentIndex + 1] : null;
-            const prevCard = hasPrev ? cards[currentIndex - 1] : null;
-            
-            // Clean question text by removing Q1), Q2), etc.
-            const cleanQuestion = currentCard.question.replace(/^Q\d+\)\s*/, '');
-            
-            // Peek thresholds
-            const PEEK_THRESHOLD = 50; // Minimum drag for peek
-            const NAVIGATE_THRESHOLD = 120; // Minimum drag for navigation
-            
-            // Hide hints after 3 seconds
-            useEffect(() => {
-                const timer = setTimeout(() => setShowHints(false), 3000);
-                return () => clearTimeout(timer);
-            }, [currentIndex]);
-            
-            // Reset drag offset when navigation happens
-            useEffect(() => {
-                setDragOffset(0);
-                setIsDragging(false);
-            }, [currentIndex]);
-            
-            // Reset drag offset when card flips
-            useEffect(() => {
-                setDragOffset(0);
-            }, [isFlipped]);
-            
-            // Speech effect for fullscreen mode
-            useEffect(() => {
-                SpeechService.stop();
-                
-                if (settings.speechEnabled && !isSliding && animationPhase === 'idle') {
-                    setTimeout(() => {
-                        if (!isFlipped && settings.autoReadQuestion) {
-                            SpeechService.speak(cleanQuestion, settings);
-                        } else if (isFlipped && settings.autoReadAnswer) {
-                            SpeechService.speak(currentCard.answer, settings);
-                        }
-                    }, 300);
-                }
-            }, [currentIndex, isFlipped, settings, isSliding, animationPhase, cleanQuestion]);
-            
-            // Enhanced navigation with staggered slide animation
-            const handleNavigateWithAnimation = (newIndex, direction) => {
-                if (isSliding || animationPhase !== 'idle') return; // Prevent multiple animations
-                
-                setIsSliding(true);
-                setSlideDirection(direction);
-                setAnimationPhase('slide-out');
-                
-                // Phase 1: Slide out current card (250ms)
-                setTimeout(() => {
-                    onNavigate(newIndex);
-                    setAnimationPhase('slide-in');
-                    
-                    // Phase 2: Slide in new card (250ms)
-                    setTimeout(() => {
-                        setSlideDirection('');
-                        setIsSliding(false);
-                        setAnimationPhase('idle');
-                    }, 250);
-                }, 250);
-            };
-            
-            const handleCardClick = () => {
-                if (isSliding || animationPhase !== 'idle' || isTransitioning) return; // Prevent clicks during animations
-                
-                SpeechService.stop();
-                setIsTransitioning(true);
-                
-                // Fade transition: fade out, flip state, then fade in
-                setTimeout(() => {
-                    onFlip();
-                    setTimeout(() => {
-                        setIsTransitioning(false);
-                    }, 200); // Fade in duration
-                }, 200); // Fade out duration
-            };
-            
-            // Enhanced slide animation calculations
-            const getSlideTransform = () => {
-                if (animationPhase === 'slide-out') {
-                    return slideDirection === 'left' 
-                        ? 'translateX(-120%) translateZ(-200px) rotateY(-15deg) scale(0.8)'
-                        : 'translateX(120%) translateZ(-200px) rotateY(15deg) scale(0.8)';
-                } else if (animationPhase === 'slide-in') {
-                    return slideDirection === 'left'
-                        ? 'translateX(120%) translateZ(-200px) rotateY(15deg) scale(0.8)'
-                        : 'translateX(-120%) translateZ(-200px) rotateY(-15deg) scale(0.8)';
-                }
-                return 'translateX(0) translateZ(0) rotateY(0deg) scale(1)';
-            };
-            
-            const getSlideOpacity = () => {
-                if (animationPhase === 'slide-out') return 0;
-                if (animationPhase === 'slide-in') return 0.7;
-                return 1;
-            };
-            
-            // Touch handlers for gestures with peek animation
-            const handleTouchStart = (e) => {
-                const touch = e.touches[0];
-                touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-                setShowHints(false);
-                setIsDragging(true);
-                
-                // Add subtle touch feedback
-                e.currentTarget.style.transform = 'scale(0.99)';
-                e.currentTarget.style.transition = 'transform 0.1s ease-out';
-            };
-            
-            const handleTouchMove = (e) => {
-                if (!isDragging || isSliding || animationPhase !== 'idle' || isTransitioning) return;
-                
-                const touch = e.touches[0];
-                const deltaX = touch.clientX - touchStartRef.current.x;
-                
-                // Update drag offset for peek effect
-                setDragOffset(deltaX);
-            };
-            
-            const handleTouchEnd = (e) => {
-                // Remove touch feedback
-                e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.transition = 'transform 0.2s ease-out';
-                
-                setIsDragging(false);
-                
-                if (isSliding || animationPhase !== 'idle' || isTransitioning) return;
-                
-                const touch = e.changedTouches[0];
-                touchEndRef.current = { x: touch.clientX, y: touch.clientY };
-                
-                const deltaX = touchEndRef.current.x - touchStartRef.current.x;
-                const deltaY = touchEndRef.current.y - touchStartRef.current.y;
-                
-                const minSwipeDistance = 50;
-                
-                // Reset drag offset
-                setDragOffset(0);
-                
-                // Determine gesture type
-                if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > minSwipeDistance) {
-                    // Vertical swipe
-                    if (deltaY > 0) {
-                        // Swipe down - exit fullscreen with fade effect
-                        SpeechService.stop();
-                        e.currentTarget.style.opacity = '0';
-                        e.currentTarget.style.transform = 'scale(0.9) translateY(20px)';
-                        e.currentTarget.style.transition = 'all 0.3s ease-out';
-                        setTimeout(() => onExit(), 200);
-                    }
-                } else if (Math.abs(deltaX) > NAVIGATE_THRESHOLD) {
-                    // Large horizontal swipe - navigate
-                    SpeechService.stop();
-                    if (deltaX > 0) {
-                        // Swipe right - previous card
-                        if (currentIndex > 0) {
-                            handleNavigateWithAnimation(currentIndex - 1, 'right');
-                        }
-                    } else {
-                        // Swipe left - next card
-                        if (currentIndex < cards.length - 1) {
-                            handleNavigateWithAnimation(currentIndex + 1, 'left');
-                        }
-                    }
-                } else if (Math.abs(deltaX) < 30 && Math.abs(deltaY) < 30) {
-                    // Small movement - flip card
-                    handleCardClick();
-                }
-                // Medium swipes (between peek and navigate) do nothing - just return to center
-            };
-            
-            return (
-                <div className={`fixed inset-0 z-50 ${
-                    theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'
-                } flex flex-col`}>
-                    {/* Header with counter */}
-                    <div className={`flex justify-between items-center p-4 ${
-                        theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-                    } border-b`}>
-                        <div className="text-lg font-semibold">
-                            {currentIndex + 1} / {cards.length}
-                        </div>
-                        <div className="flex items-center gap-4">
-                            {/* Subtle points display */}
-                            <span className={`text-sm opacity-50 ${
-                                theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                            }`}>
-                                {currentCard.points || 1}pt
-                            </span>
-                            <button
-                                onClick={onExit}
-                                className={`p-2 rounded-lg ${
-                                    theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                }`}
-                            >
-                                ✕
-                            </button>
-                        </div>
-                    </div>
-                    
-                    {/* Progress bar */}
-                    <div className={`h-1 ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'}`}>
-                        <div
-                            className="h-full bg-blue-500 transition-all duration-300"
-                            style={{ width: `${((currentIndex + 1) / cards.length) * 100}%` }}
-                        />
-                    </div>
-                    
-                    {/* Main card area with peek animation */}
-                    <div 
-                        className="flex-1 flex items-center justify-center p-4 perspective-1000 relative overflow-hidden"
-                        onTouchStart={handleTouchStart}
-                        onTouchMove={handleTouchMove}
-                        onTouchEnd={handleTouchEnd}
-                    >
-                        {/* Previous card preview (right side when dragging right) */}
-                        {prevCard && Math.abs(dragOffset) > PEEK_THRESHOLD && dragOffset > 0 && (
-                            <div 
-                                className="absolute left-0 top-0 w-full h-full flex items-center justify-center p-4"
-                                style={{
-                                    transform: `translateX(${Math.min(dragOffset - 100, 0)}px) scale(2)`,
-                                    opacity: Math.min(Math.abs(dragOffset) / NAVIGATE_THRESHOLD, 0.8),
-                                    transformOrigin: 'center center'
-                                }}
-                            >
-                                <div className={`w-full max-w-2xl h-full rounded-3xl p-8 flex flex-col ${
-                                    theme === 'dark' 
-                                        ? 'bg-gradient-to-br from-gray-700 via-gray-800 to-gray-700 text-white' 
-                                        : 'bg-gradient-to-br from-gray-100 via-gray-200 to-gray-100'
-                                } shadow-xl overflow-hidden border-2 ${
-                                    theme === 'dark' ? 'border-gray-500' : 'border-gray-300'
-                                }`}>
-                                    <div className="text-center mb-4">
-                                        <div className="text-2xl font-light tracking-widest opacity-60">
-                                            QUESTION {currentIndex}
-                                        </div>
-                                    </div>
-                                    {/* No text content during peek */}
-                                </div>
-                            </div>
-                        )}
-                        
-                        {/* Next card preview (left side when dragging left) */}
-                        {nextCard && Math.abs(dragOffset) > PEEK_THRESHOLD && dragOffset < 0 && (
-                            <div 
-                                className="absolute right-0 top-0 w-full h-full flex items-center justify-center p-4"
-                                style={{
-                                    transform: `translateX(${Math.max(dragOffset + 100, 0)}px) scale(2)`,
-                                    opacity: Math.min(Math.abs(dragOffset) / NAVIGATE_THRESHOLD, 0.8),
-                                    transformOrigin: 'center center'
-                                }}
-                            >
-                                <div className={`w-full max-w-2xl h-full rounded-3xl p-8 flex flex-col ${
-                                    theme === 'dark' 
-                                        ? 'bg-gradient-to-br from-gray-700 via-gray-800 to-gray-700 text-white' 
-                                        : 'bg-gradient-to-br from-gray-100 via-gray-200 to-gray-100'
-                                } shadow-xl overflow-hidden border-2 ${
-                                    theme === 'dark' ? 'border-gray-500' : 'border-gray-300'
-                                }`}>
-                                    <div className="text-center mb-4">
-                                        <div className="text-2xl font-light tracking-widest opacity-60">
-                                            QUESTION {currentIndex + 2}
-                                        </div>
-                                    </div>
-                                    {/* No text content during peek */}
-                                </div>
-                            </div>
-                        )}
-                        
-                        {/* Big question numbers when dragging */}
-                        {Math.abs(dragOffset) > PEEK_THRESHOLD && (
-                            <>
-                                {/* Previous question number (when dragging right) */}
-                                {dragOffset > 0 && hasPrev && (
-                                    <div 
-                                        className="absolute left-8 top-1/2 transform -translate-y-1/2 pointer-events-none z-20"
-                                        style={{
-                                            opacity: Math.min(Math.abs(dragOffset) / NAVIGATE_THRESHOLD, 0.8)
-                                        }}
-                                    >
-                                        <div className={`text-20xl font-bold ${
-                                            theme === 'dark' ? 'text-white' : 'text-gray-800'
-                                        }`} style={{ fontSize: '10rem', lineHeight: '1' }}>
-                                            {currentIndex}
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                {/* Next question number (when dragging left) */}
-                                {dragOffset < 0 && hasNext && (
-                                    <div 
-                                        className="absolute right-8 top-1/2 transform -translate-y-1/2 pointer-events-none z-20"
-                                        style={{
-                                            opacity: Math.min(Math.abs(dragOffset) / NAVIGATE_THRESHOLD, 0.8)
-                                        }}
-                                    >
-                                        <div className={`text-20xl font-bold ${
-                                            theme === 'dark' ? 'text-white' : 'text-gray-800'
-                                        }`} style={{ fontSize: '10rem', lineHeight: '1' }}>
-                                            {currentIndex + 2}
-                                        </div>
-                                    </div>
-                                )}
-                            </>
-                        )}
-                        
-                        {/* Main current card */}
-                        <div 
-                            className={`relative w-full max-w-2xl h-full cursor-pointer transition-all duration-300 ease-out z-10`}
-                            style={{
-                                transform: `${getSlideTransform()} translateX(${Math.max(-50, Math.min(50, dragOffset * 0.3))}px)`,
-                                transition: isDragging ? 'none' : 'all 0.5s cubic-bezier(0.4, 0.0, 0.2, 1)',
-                                filter: animationPhase !== 'idle' ? 'blur(1px)' : 'blur(0px)',
-                                opacity: getSlideOpacity()
-                            }}
-                            onClick={handleCardClick}
-                        >
-                            {/* Single card container with fade transition */}
-                            <div className={`w-full h-full rounded-3xl p-8 flex flex-col ${
-                                theme === 'dark' 
-                                    ? 'bg-gradient-to-br from-gray-800 via-gray-900 to-gray-800 text-white' 
-                                    : 'bg-gradient-to-br from-white via-gray-50 to-white'
-                            } shadow-2xl overflow-hidden border-2 ${
-                                theme === 'dark' ? 'border-gray-600' : 'border-gray-200'
-                            } transition-opacity duration-200`}
-                            style={{
-                                opacity: isTransitioning ? 0.3 : 1,
-                                boxShadow: `
-                                    0 25px 50px -12px rgba(0, 0, 0, 0.25),
-                                    0 0 30px rgba(59, 130, 246, ${isTransitioning ? '0.3' : '0.1'})
-                                `
-                            }}>
-                                {/* Enhanced label with dynamic numbering */}
-                                <div className="text-center mb-4">
-                                    <div className={`text-2xl font-light tracking-widest transition-all duration-300 ${
-                                        isTransitioning ? 'opacity-20 scale-95' : 'opacity-40'
-                                    }`}>
-                                        {isFlipped ? `ANSWER ${currentIndex + 1}` : `QUESTION ${currentIndex + 1}`}
-                                    </div>
-                                </div>
-                                
-                                {/* Content */}
-                                <div className="flex-1 overflow-y-auto flex items-center justify-center">
-                                    <div className="text-center w-full">
-                                        <h2 className={`text-xl md:text-2xl font-medium leading-relaxed whitespace-pre-line transition-all duration-300 ${
-                                            isTransitioning ? 'opacity-30 scale-98' : 'opacity-100 scale-100'
-                                        }`}>
-                                            {isFlipped ? currentCard.answer : cleanQuestion}
-                                        </h2>
-                                    </div>
-                                </div>
-                                
-                                {/* Page numbers without triangular corners */}
-                                {hasPrev && (
-                                    <div className="absolute bottom-4 left-4">
-                                        <div className="text-xs font-bold text-gray-600 dark:text-gray-300">
-                                            {currentIndex}
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                {hasNext && (
-                                    <div className="absolute bottom-4 right-4">
-                                        <div className="text-xs font-bold text-gray-600 dark:text-gray-300">
-                                            {currentIndex + 2}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                    
-                    {/* Enhanced gesture hints with animation */}
-                    {showHints && (
-                        <div className={`absolute bottom-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-2xl ${
-                            theme === 'dark' ? 'bg-gray-800 text-gray-300' : 'bg-white text-gray-600'
-                        } shadow-xl text-sm text-center backdrop-blur-md bg-opacity-90 border border-opacity-20 ${
-                            theme === 'dark' ? 'border-gray-600' : 'border-gray-300'
-                        } animate-pulse`}
-                        style={{
-                            animation: 'fadeInUp 0.5s ease-out, pulse 2s infinite',
-                            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 0 20px rgba(59, 130, 246, 0.1)'
-                        }}>
-                            <div className="flex items-center justify-center gap-1 text-xs">
-                                <span className="animate-bounce">👆</span> Tap to flip • 
-                                <span className="animate-bounce" style={{animationDelay: '0.1s'}}>←</span> 
-                                <span className="animate-bounce" style={{animationDelay: '0.2s'}}>→</span> Drag to peek • 
-                                <span className="animate-bounce" style={{animationDelay: '0.3s'}}>↓</span> Swipe down to exit
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        // Continuous Auto-Play Study Mode - Synchronized Speech + Display
+        // Continuous Study Mode - Fixed and Simplified
         function ContinuousStudyMode({ cards, onComplete, onExit }) {
             const { state: { theme, settings } } = useFlashCards();
             const [currentIndex, setCurrentIndex] = useState(0);
             const [isPlaying, setIsPlaying] = useState(false);
             const [isPaused, setIsPaused] = useState(false);
-            const [phase, setPhase] = useState('ready'); // 'ready', 'intro', 'question', 'answer', 'complete'
+            const [phase, setPhase] = useState('ready');
             const [displayContent, setDisplayContent] = useState('');
             const [startTime] = useState(Date.now());
             
             const currentCard = cards[currentIndex];
             const progress = ((currentIndex + 1) / cards.length) * 100;
-            
-            // Timing settings (in milliseconds) - Streamlined for faster flow
-            const PAUSE_AFTER_POINTS = 800;      // 0.8 seconds after "6 points"
-            const PAUSE_AFTER_QUESTION = 1000;   // 1 second after question
-            const PAUSE_AFTER_ANSWER = 1500;     // 1.5 seconds after answer
-            const PAUSE_BETWEEN_CARDS = 1200;    // 1.2 seconds between question-answer pairs
             
             useEffect(() => {
                 return () => {
@@ -1469,7 +896,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 setCurrentIndex(0);
                 
                 ContinuousStudyService.start(() => {
-                    // This is called when study is stopped
                     setIsPlaying(false);
                     setIsPaused(false);
                     setPhase('ready');
@@ -1489,46 +915,44 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         const card = cards[i];
                         const cleanQuestion = card.question.replace(/^Q\d+\)\s*/, '');
                         
-                        // Update current index
                         setCurrentIndex(i);
                         
-                        // Phase 1: Announce just the points (no question number)
+                        // Points
                         const pointsText = `${card.points || 1} point${(card.points || 1) > 1 ? 's' : ''}`;
                         setPhase('intro');
                         setDisplayContent(pointsText);
-                        await ContinuousStudyService.speakAndWait(pointsText, settings, PAUSE_AFTER_POINTS);
+                        await ContinuousStudyService.speakAndWait(pointsText, settings, 800);
                         
                         if (!ContinuousStudyService.isRunning) break;
                         
-                        // Phase 2: Show and read question
+                        // Question
                         setPhase('question');
                         setDisplayContent(cleanQuestion);
-                        await ContinuousStudyService.speakAndWait(cleanQuestion, settings, PAUSE_AFTER_QUESTION);
+                        await ContinuousStudyService.speakAndWait(cleanQuestion, settings, 1000);
                         
                         if (!ContinuousStudyService.isRunning) break;
                         
-                        // Phase 3: Show and read answer
+                        // Answer
                         setPhase('answer');
                         setDisplayContent(card.answer);
-                        await ContinuousStudyService.speakAndWait(card.answer, settings, PAUSE_AFTER_ANSWER);
+                        await ContinuousStudyService.speakAndWait(card.answer, settings, 1500);
                         
                         if (!ContinuousStudyService.isRunning) break;
                         
-                        // Phase 4: Brief pause between cards (except for last card)
+                        // Pause between cards
                         if (i < cards.length - 1) {
                             setPhase('transition');
                             setDisplayContent('Next question...');
-                            await new Promise(resolve => setTimeout(resolve, PAUSE_BETWEEN_CARDS));
+                            await new Promise(resolve => setTimeout(resolve, 1200));
                         }
                     }
                     
-                    // Study completed
+                    // Complete
                     if (ContinuousStudyService.isRunning) {
                         setPhase('complete');
                         setDisplayContent('Study session complete! Well done!');
                         await ContinuousStudyService.speakAndWait('Study session complete! Well done!', settings, 1000);
                         
-                        // Calculate session stats
                         const duration = Math.floor((Date.now() - startTime) / 1000);
                         const totalPoints = cards.reduce((sum, card) => sum + (card.points || 1), 0);
                         
@@ -1557,7 +981,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             const resumeStudy = () => {
                 setIsPaused(false);
                 ContinuousStudyService.resume();
-                // Continue from where we left off
                 runContinuousStudy();
             };
             
@@ -1568,39 +991,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 setPhase('ready');
                 setCurrentIndex(0);
                 setDisplayContent('');
-            };
-            
-            const getPhaseIcon = () => {
-                switch (phase) {
-                    case 'intro': return '📢';
-                    case 'question': return '❓';
-                    case 'answer': return '💡';
-                    case 'transition': return '⏭️';
-                    case 'complete': return '🎉';
-                    default: return '🎵';
-                }
-            };
-            
-            const getPhaseText = () => {
-                switch (phase) {
-                    case 'intro': return 'Announcing Points';
-                    case 'question': return 'Reading Question';
-                    case 'answer': return 'Reading Answer';
-                    case 'transition': return 'Next Question...';
-                    case 'complete': return 'Session Complete!';
-                    default: return 'Ready to Start';
-                }
-            };
-            
-            const getPhaseColor = () => {
-                switch (phase) {
-                    case 'intro': return 'border-purple-500';
-                    case 'question': return 'border-blue-500';
-                    case 'answer': return 'border-green-500';
-                    case 'transition': return 'border-orange-500';
-                    case 'complete': return 'border-yellow-500';
-                    default: return theme === 'dark' ? 'border-gray-700' : 'border-gray-200';
-                }
             };
             
             if (!settings.speechEnabled) {
@@ -1623,11 +1013,10 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             
             return (
                 <div className="space-y-6 pb-6">
-                    {/* Header */}
                     <div className="text-center">
                         <h2 className="text-2xl font-bold mb-2">🎵 Continuous Study Mode</h2>
                         <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Streamlined auto-play: Points → Question → Answer with quick transitions
+                            Auto-play: Points → Question → Answer with smooth transitions
                         </p>
                     </div>
                     
@@ -1651,45 +1040,31 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         </div>
                     </div>
                     
-                    {/* Synchronized Display - Shows what's being read */}
+                    {/* Display */}
                     <div className={`p-6 rounded-xl ${
                         theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                    } border-2 ${getPhaseColor()} min-h-[250px] flex flex-col justify-center`}>
+                    } min-h-[250px] flex flex-col justify-center`}>
                         <div className="text-center mb-4">
-                            <div className="text-4xl mb-2 animate-pulse">
-                                {getPhaseIcon()}
+                            <div className="text-4xl mb-2">
+                                {phase === 'intro' ? '📢' : 
+                                 phase === 'question' ? '❓' : 
+                                 phase === 'answer' ? '💡' : 
+                                 phase === 'complete' ? '🎉' : '🎵'}
                             </div>
                             <h3 className="text-lg font-semibold mb-1">
-                                {getPhaseText()}
+                                {phase === 'intro' ? 'Announcing Points' :
+                                 phase === 'question' ? 'Reading Question' :
+                                 phase === 'answer' ? 'Reading Answer' :
+                                 phase === 'complete' ? 'Session Complete!' : 'Ready to Start'}
                             </h3>
-                            {isPlaying && (
-                                <p className="text-sm text-gray-500">
-                                    {phase === 'intro' && `${currentCard?.points || 1}pt question`}
-                                    {phase === 'question' && 'Listen and read along'}
-                                    {phase === 'answer' && 'Answer being read aloud'}
-                                    {phase === 'transition' && 'Preparing next...'}
-                                    {phase === 'complete' && 'All questions completed!'}
-                                </p>
-                            )}
                         </div>
                         
-                        {/* Content Display - Exactly what's being read */}
                         {displayContent && isPlaying && (
                             <div className={`p-4 rounded-lg ${
                                 theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'
-                            } border-l-4 ${
-                                phase === 'intro' ? 'border-purple-500' :
-                                phase === 'question' ? 'border-blue-500' :
-                                phase === 'answer' ? 'border-green-500' :
-                                phase === 'transition' ? 'border-orange-500' :
-                                'border-yellow-500'
                             }`}>
                                 <div className={`${
                                     phase === 'intro' ? 'text-center font-semibold text-lg' :
-                                    phase === 'transition' ? 'text-center italic' :
-                                    phase === 'complete' ? 'text-center font-bold text-lg' :
-                                    'text-left'
-                                } ${
                                     phase === 'answer' ? 'whitespace-pre-line' : ''
                                 }`}>
                                     {displayContent}
@@ -1702,9 +1077,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                 <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
                                     Questions and answers will appear here as they're read aloud
                                 </p>
-                                <p className={`text-xs mt-2 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>
-                                    Perfect synchronization between speech and visual display
-                                </p>
                             </div>
                         )}
                     </div>
@@ -1716,8 +1088,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                 onClick={startContinuousStudy}
                                 className="w-full py-4 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl hover:from-blue-600 hover:to-purple-600 font-medium text-lg flex items-center justify-center gap-2"
                             >
-                                <Icon name="study" className="w-5 h-5" />
-                                Start Streamlined Auto-Play
+                                🎵 Start Auto-Play
                             </button>
                         ) : (
                             <div className="grid grid-cols-2 gap-3">
@@ -1751,57 +1122,29 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                             ← Back to Study Options
                         </button>
                     </div>
-                    
-                    {/* Enhanced Instructions */}
-                    {!isPlaying && (
-                        <div className={`p-4 rounded-xl ${
-                            theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
-                        }`}>
-                            <h4 className="font-semibold mb-2">✨ Streamlined Auto-Play Flow:</h4>
-                            <ul className="text-sm space-y-1 text-gray-600 dark:text-gray-400">
-                                <li>• 📢 <strong>Points</strong>: "6 points" (no question numbers)</li>
-                                <li>• ❓ <strong>Question</strong>: Full text shown + read aloud</li>
-                                <li>• 💡 <strong>Answer</strong>: Complete answer displayed + spoken</li>
-                                <li>• ⏭️ <strong>Flow</strong>: Quick transitions, minimal gaps</li>
-                                <li>• 🎯 <strong>Efficient</strong>: Faster pace, perfect sync</li>
-                            </ul>
-                        </div>
-                    )}
                 </div>
             );
         }
+
+        // Manual Study Mode - Fixed
         function MobileStudyMode({ cards, onComplete }) {
             const { state: { theme } } = useFlashCards();
             const [currentIndex, setCurrentIndex] = useState(0);
             const [isFlipped, setIsFlipped] = useState(false);
-            const [isFullscreen, setIsFullscreen] = useState(false);
             const [startTime] = useState(Date.now());
             const [showCompletePrompt, setShowCompletePrompt] = useState(false);
             
             const currentCard = cards[currentIndex];
             const progress = ((currentIndex + 1) / cards.length) * 100;
-            
-            // Calculate total points
             const totalPoints = useMemo(() => {
                 return cards.reduce((sum, card) => sum + (card.points || 1), 0);
             }, [cards]);
             
-            // Stop speech when component unmounts or session ends
             useEffect(() => {
                 return () => {
                     SpeechService.stop();
                 };
             }, []);
-            
-            useEffect(() => {
-                if (showCompletePrompt) {
-                    SpeechService.stop();
-                }
-            }, [showCompletePrompt]);
-            
-            useEffect(() => {
-                SpeechService.stop();
-            }, [currentIndex]);
             
             const handleFlip = () => {
                 setIsFlipped(!isFlipped);
@@ -1832,14 +1175,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 });
             };
             
-            const handleFullscreen = () => {
-                setIsFullscreen(true);
-            };
-            
-            const handleExitFullscreen = () => {
-                setIsFullscreen(false);
-            };
-            
             if (!currentCard) {
                 return (
                     <div className="flex items-center justify-center h-96">
@@ -1851,20 +1186,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 );
             }
             
-            // **FULLSCREEN MODE**
-            if (isFullscreen) {
-                return (
-                    <FullscreenStudyMode
-                        cards={cards}
-                        currentIndex={currentIndex}
-                        isFlipped={isFlipped}
-                        onFlip={handleFlip}
-                        onNavigate={handleNavigate}
-                        onExit={handleExitFullscreen}
-                    />
-                );
-            }
-            
             return (
                 <div className="space-y-4 pb-6">
                     <div className="p-4 rounded-xl">
@@ -1872,22 +1193,9 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                             <span className="text-sm font-medium">
                                 Question {currentIndex + 1} of {cards.length}
                             </span>
-                            <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-1">
-                                    <Icon name="points" className="w-4 h-4 text-blue-500" />
-                                    <span className="text-sm font-medium">{totalPoints}pt total</span>
-                                </div>
-                                {/* **FULLSCREEN BUTTON** */}
-                                <button
-                                    onClick={handleFullscreen}
-                                    className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                                        theme === 'dark' 
-                                            ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
-                                            : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                                    } transition-colors`}
-                                >
-                                    🔳 Fullscreen
-                                </button>
+                            <div className="flex items-center gap-1">
+                                <Icon name="points" className="w-4 h-4 text-blue-500" />
+                                <span className="text-sm font-medium">{totalPoints}pt total</span>
                             </div>
                         </div>
                         <div className={`h-2 rounded-full overflow-hidden ${
@@ -1905,8 +1213,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                             card={currentCard}
                             isFlipped={isFlipped}
                             onFlip={handleFlip}
-                            isFullscreen={false}
-                            onToggleFullscreen={handleFullscreen}
                         />
                     </div>
                     
@@ -1936,9 +1242,9 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                     
                     {showCompletePrompt && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                            <div className={`w-full max-w-sm rounded-2xl p-6 ${
+                            <div className={`w-full max-w-sm rounded-2xl ${
                                 theme === 'dark' ? 'bg-gray-900' : 'bg-white'
-                            }`}>
+                            } p-6`}>
                                 <h3 className="text-xl font-semibold mb-4 text-center">Session Complete! 🎉</h3>
                                 <div className="space-y-3 mb-6">
                                     <div className="flex justify-between">
@@ -1969,252 +1275,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             );
         }
 
-        // Points Selection Modal for Continuous Study
-        function ContinuousPointsSelectionModal({ onSelect, onCancel, availablePoints, theme }) {
-            const { state: { cards } } = useFlashCards();
-            const [selectedPoints, setSelectedPoints] = useState([]);
-            
-            const togglePoint = (point) => {
-                setSelectedPoints(prev => 
-                    prev.includes(point) 
-                        ? prev.filter(p => p !== point)
-                        : [...prev, point]
-                );
-            };
-            
-            const selectAll = () => {
-                setSelectedPoints(availablePoints);
-            };
-            
-            const clearAll = () => {
-                setSelectedPoints([]);
-            };
-            
-            const getCardCountForPoints = (points) => {
-                return cards.filter(card => (card.points || 1) === points).length;
-            };
-            
-            const getSelectedCardCount = () => {
-                return cards.filter(card => selectedPoints.includes(card.points || 1)).length;
-            };
-            
-            const getTotalPoints = () => {
-                return cards
-                    .filter(card => selectedPoints.includes(card.points || 1))
-                    .reduce((sum, card) => sum + (card.points || 1), 0);
-            };
-            
-            return (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className={`w-full max-w-sm rounded-2xl p-6 ${
-                        theme === 'dark' ? 'bg-gray-900' : 'bg-white'
-                    }`}>
-                        <h3 className="text-xl font-semibold mb-2">🎵 Continuous Study by Points</h3>
-                        <p className={`text-sm mb-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Select which point values for auto-play. Focus on specific difficulty levels while listening hands-free!
-                        </p>
-                        
-                        <div className="grid grid-cols-3 gap-3 mb-4">
-                            {availablePoints.map(point => {
-                                const count = getCardCountForPoints(point);
-                                return (
-                                    <button
-                                        key={point}
-                                        onClick={() => togglePoint(point)}
-                                        className={`relative py-3 rounded-xl border transition-all ${
-                                            selectedPoints.includes(point)
-                                                ? getPointsColor(point) + ' border-transparent'
-                                                : theme === 'dark'
-                                                ? 'border-gray-700 hover:border-gray-600'
-                                                : 'border-gray-300 hover:border-gray-400'
-                                        }`}
-                                    >
-                                        <div className="flex flex-col items-center">
-                                            <div className="flex items-center gap-1">
-                                                <Icon name="points" className="w-4 h-4" />
-                                                <span className="font-medium">{point}pt</span>
-                                            </div>
-                                            <span className="text-xs opacity-75 mt-1">{count} cards</span>
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                        
-                        {selectedPoints.length > 0 && (
-                            <div className={`text-center mb-4 p-3 rounded-lg ${
-                                theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
-                            }`}>
-                                <div className="text-sm font-medium mb-1">
-                                    Selected: {getSelectedCardCount()} cards
-                                </div>
-                                <div className="text-xs opacity-75">
-                                    Total: {getTotalPoints()} points
-                                </div>
-                            </div>
-                        )}
-                        
-                        <div className="flex gap-2 mb-4">
-                            <button
-                                onClick={selectAll}
-                                className={`flex-1 py-2 px-3 rounded-lg text-sm ${
-                                    theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'
-                                }`}
-                            >
-                                Select All
-                            </button>
-                            <button
-                                onClick={clearAll}
-                                className={`flex-1 py-2 px-3 rounded-lg text-sm ${
-                                    theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'
-                                }`}
-                            >
-                                Clear All
-                            </button>
-                        </div>
-                        
-                        <div className="flex gap-3">
-                            <button
-                                onClick={onCancel}
-                                className={`flex-1 py-3 rounded-xl border ${
-                                    theme === 'dark' 
-                                        ? 'border-gray-700 hover:bg-gray-800' 
-                                        : 'border-gray-300 hover:bg-gray-100'
-                                } transition-colors font-medium`}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={() => onSelect(selectedPoints)}
-                                disabled={selectedPoints.length === 0}
-                                className="flex-1 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-                            >
-                                Start Auto-Play
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-        function PointsSelectionModal({ onSelect, onCancel, availablePoints, theme }) {
-            const { state: { cards } } = useFlashCards();
-            const [selectedPoints, setSelectedPoints] = useState([]);
-            
-            const togglePoint = (point) => {
-                setSelectedPoints(prev => 
-                    prev.includes(point) 
-                        ? prev.filter(p => p !== point)
-                        : [...prev, point]
-                );
-            };
-            
-            const selectAll = () => {
-                setSelectedPoints(availablePoints);
-            };
-            
-            const clearAll = () => {
-                setSelectedPoints([]);
-            };
-            
-            const getCardCountForPoints = (points) => {
-                return cards.filter(card => (card.points || 1) === points).length;
-            };
-            
-            const getSelectedCardCount = () => {
-                return cards.filter(card => selectedPoints.includes(card.points || 1)).length;
-            };
-            
-            return (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className={`w-full max-w-sm rounded-2xl p-6 ${
-                        theme === 'dark' ? 'bg-gray-900' : 'bg-white'
-                    }`}>
-                        <h3 className="text-xl font-semibold mb-2">Study by Points 🏆</h3>
-                        <p className={`text-sm mb-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Select which point values to practice. For example, choose only 5pt questions for a challenging session!
-                        </p>
-                        
-                        <div className="grid grid-cols-3 gap-3 mb-4">
-                            {availablePoints.map(point => {
-                                const count = getCardCountForPoints(point);
-                                return (
-                                    <button
-                                        key={point}
-                                        onClick={() => togglePoint(point)}
-                                        className={`relative py-3 rounded-xl border transition-all ${
-                                            selectedPoints.includes(point)
-                                                ? getPointsColor(point) + ' border-transparent'
-                                                : theme === 'dark'
-                                                ? 'border-gray-700 hover:border-gray-600'
-                                                : 'border-gray-300 hover:border-gray-400'
-                                        }`}
-                                    >
-                                        <div className="flex flex-col items-center">
-                                            <div className="flex items-center gap-1">
-                                                <Icon name="points" className="w-4 h-4" />
-                                                <span className="font-medium">{point}pt</span>
-                                            </div>
-                                            <span className="text-xs opacity-75 mt-1">{count} cards</span>
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                        
-                        {selectedPoints.length > 0 && (
-                            <div className={`text-center mb-4 p-2 rounded-lg ${
-                                theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
-                            }`}>
-                                <span className="text-sm">
-                                    Selected: {getSelectedCardCount()} cards
-                                </span>
-                            </div>
-                        )}
-                        
-                        <div className="flex gap-2 mb-4">
-                            <button
-                                onClick={selectAll}
-                                className={`flex-1 py-2 px-3 rounded-lg text-sm ${
-                                    theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'
-                                }`}
-                            >
-                                Select All
-                            </button>
-                            <button
-                                onClick={clearAll}
-                                className={`flex-1 py-2 px-3 rounded-lg text-sm ${
-                                    theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'
-                                }`}
-                            >
-                                Clear All
-                            </button>
-                        </div>
-                        
-                        <div className="flex gap-3">
-                            <button
-                                onClick={onCancel}
-                                className={`flex-1 py-3 rounded-xl border ${
-                                    theme === 'dark' 
-                                        ? 'border-gray-700 hover:bg-gray-800' 
-                                        : 'border-gray-300 hover:bg-gray-100'
-                                } transition-colors font-medium`}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={() => onSelect(selectedPoints)}
-                                disabled={selectedPoints.length === 0}
-                                className="flex-1 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-                            >
-                                Start Study
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        // Card Editor
+        // Card Editor - Fixed
         function MobileCardEditor({ card, onSave, onCancel }) {
             const { state: { theme } } = useFlashCards();
             const [question, setQuestion] = useState(card?.question || '');
@@ -2330,15 +1391,13 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             );
         }
 
-        // Provider Component
+        // Provider Component - Fixed
         function FlashCardsProvider({ children }) {
             const [state, setState] = useState(() => {
                 const saved = StorageService.load();
-                // If saved data exists but cards don't have points, migrate them
                 if (saved?.cards) {
                     saved.cards = saved.cards.map(card => {
                         if (!card.points) {
-                            // Convert difficulty to points
                             const pointsMap = { easy: 1, medium: 3, hard: 5 };
                             return { ...card, points: pointsMap[card.difficulty] || 1 };
                         }
@@ -2347,7 +1406,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 }
                 return {
                     cards: saved?.cards || createDefaultCards(),
-                    categories: saved?.categories || new Set(['Theory Questions']),
+                    categories: saved?.categories || new Set(['Crane Questions']),
                     studySessions: saved?.studySessions || [],
                     cardProgress: saved?.cardProgress || {},
                     theme: saved?.theme || 'dark',
@@ -2444,7 +1503,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 setState(prev => ({
                     ...prev,
                     cards: [],
-                    categories: new Set(['Theory Questions']),
+                    categories: new Set(['Crane Questions']),
                     studySessions: [],
                     cardProgress: {},
                 }));
@@ -2481,7 +1540,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             return React.createElement(FlashCardsContext.Provider, { value }, children);
         }
 
-        // Main App Component
+        // Main App Component - Fixed
         function MobileFlashCardsApp() {
             const { state, toggleTheme, addCard, updateCard, deleteCard, addStudySession, importData, clearAllCards, toggleSpeech } = useFlashCards();
             const { theme, cards, categories, settings } = state;
@@ -2494,13 +1553,11 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             const [editingCard, setEditingCard] = useState(undefined);
             const [isStudying, setIsStudying] = useState(false);
             const [showMenu, setShowMenu] = useState(false);
-            const [showPointsSelection, setShowPointsSelection] = useState(false);
             const [studyCards, setStudyCards] = useState([]);
-            const [studyMode, setStudyMode] = useState('manual'); // 'manual', 'continuous'
+            const [studyMode, setStudyMode] = useState('manual');
             
             const fileInputRef = React.useRef(null);
             
-            // Get unique point values
             const availablePoints = useMemo(() => {
                 const points = [...new Set(cards.map(card => card.points || 1))].sort((a, b) => a - b);
                 return points;
@@ -2518,14 +1575,11 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             };
             
             const handleClearAll = () => {
-                const confirmed = confirm(
-                    `Are you sure you want to delete ALL ${cards.length} cards?\n\nThis action cannot be undone and will also clear all your study progress.`
-                );
-                if (confirmed) {
+                if (confirm(`Are you sure you want to delete ALL ${cards.length} cards?`)) {
                     SpeechService.stop();
                     clearAllCards();
                     setShowMenu(false);
-                    alert('All cards have been cleared. You now have a clean slate!');
+                    alert('All cards have been cleared.');
                 }
             };
             
@@ -2544,7 +1598,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                     }
                 );
                 
-                // Reset file input
                 event.target.value = '';
             };
             
@@ -2552,8 +1605,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 return cards.filter(card => {
                     const matchesSearch = !searchQuery || 
                         card.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        card.answer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        card.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+                        card.answer.toLowerCase().includes(searchQuery.toLowerCase());
                     
                     const matchesCategory = !selectedCategory || card.category === selectedCategory;
                     const matchesPoints = selectedPoints.length === 0 || selectedPoints.includes(card.points || 1);
@@ -2585,14 +1637,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                 setActiveView('study');
             };
             
-            const handlePointsSelectionForStudy = (points) => {
-                const cardsToStudy = cards.filter(card => points.includes(card.points || 1));
-                setStudyCards(cardsToStudy);
-                setShowPointsSelection(false);
-                setStudyMode('manual');
-                setIsStudying(true);
-            };
-            
             const totalPoints = useMemo(() => {
                 return cards.reduce((sum, card) => sum + (card.points || 1), 0);
             }, [cards]);
@@ -2619,7 +1663,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                     <span className={`text-sm px-2 py-0.5 rounded-full ${
                                         theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
                                     }`}>
-                                        v6.2
+                                        v6.3
                                     </span>
                                 </h1>
                                 
@@ -2661,7 +1705,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                         />
                                     </div>
                                     
-                                    {/* Points filter */}
                                     {availablePoints.length > 0 && (
                                         <div className="flex gap-2 overflow-x-auto pb-1">
                                             <button
@@ -2768,7 +1811,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         </div>
                     )}
                     
-                    {/* Hidden file input for import */}
                     <input
                         ref={fileInputRef}
                         type="file"
@@ -2880,19 +1922,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                         </button>
                                         
                                         <button
-                                            onClick={() => setShowPointsSelection(true)}
-                                            disabled={filteredCards.length === 0}
-                                            className="w-full py-4 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium relative overflow-hidden group"
-                                        >
-                                            <div className="absolute inset-0 bg-white opacity-10 transform translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
-                                            <div className="relative flex items-center justify-center gap-2">
-                                                <Icon name="points" className="w-5 h-5" />
-                                                Study by Points (Manual)
-                                            </div>
-                                            <div className="text-xs opacity-75 mt-1">Select difficulty levels and flip cards manually</div>
-                                        </button>
-                                        
-                                        <button
                                             onClick={() => {
                                                 setStudyMode('manual');
                                                 setStudyCards(filteredCards);
@@ -2958,7 +1987,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                     } text-center`}>
                                         <div className="text-3xl font-bold text-blue-500">{cards.length}</div>
                                         <div className="text-sm text-gray-500">Total Cards</div>
-                                        <div className="text-xs text-gray-400 mt-1">All 78 questions loaded!</div>
+                                        <div className="text-xs text-gray-400 mt-1">All 78 crane questions loaded!</div>
                                     </div>
                                     
                                     <div className={`p-4 rounded-xl ${
@@ -3054,15 +2083,6 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         </div>
                     )}
                     
-                    {showPointsSelection && (
-                        <PointsSelectionModal
-                            onSelect={handlePointsSelectionForStudy}
-                            onCancel={() => setShowPointsSelection(false)}
-                            availablePoints={availablePoints}
-                            theme={theme}
-                        />
-                    )}
-                    
                     <nav className={`fixed bottom-0 left-0 right-0 z-40 ${
                         theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
                     } border-t`}>
@@ -3115,7 +2135,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             );
         }
 
-        // Render the app
+        // Render
         ReactDOM.render(React.createElement(App), document.getElementById('root'));
     </script>
 </body>
