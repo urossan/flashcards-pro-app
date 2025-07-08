@@ -785,21 +785,38 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             );
         }
 
-        // Study Card Component - Fixed
+        // Study Card Component - Fixed Speech v6.5
         function MobileStudyCard({ card, isFlipped, onFlip }) {
             const { state: { theme, settings } } = useFlashCards();
             const cleanQuestion = card.question.replace(/^Q\d+\)\s*/, '');
             
+            // Auto-read question when a new card appears
+            useEffect(() => {
+                if (!isFlipped && settings.speechEnabled && settings.autoReadQuestion) {
+                    // Small delay to ensure card is fully rendered
+                    const timer = setTimeout(() => {
+                        SpeechService.speak(cleanQuestion, settings);
+                    }, 300);
+                    return () => clearTimeout(timer);
+                }
+            }, [card.id]); // Only trigger when card changes
+            
             const handleCardClick = () => {
                 SpeechService.stop();
+                
+                // Determine what will be shown AFTER the flip
+                const willShowAnswer = !isFlipped; // If currently showing question, will show answer after flip
+                
                 onFlip();
                 
-                // Speech after flip
+                // Speech after flip - read what will be displayed
                 setTimeout(() => {
                     if (settings.speechEnabled) {
-                        if (isFlipped && settings.autoReadAnswer) {
+                        if (willShowAnswer && settings.autoReadAnswer) {
+                            // Now showing answer
                             SpeechService.speak(card.answer, settings);
-                        } else if (!isFlipped && settings.autoReadQuestion) {
+                        } else if (!willShowAnswer && settings.autoReadQuestion) {
+                            // Now showing question
                             SpeechService.speak(cleanQuestion, settings);
                         }
                     }
@@ -981,7 +998,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                     <div className="text-center">
                         <h2 className="text-2xl font-bold mb-2">🎵 Continuous Study Mode</h2>
                         <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Auto-progression through cards • Fixed in v6.5
+                            Auto-progression through cards • Speech fixed in v6.5
                             {selectedPoints.length > 0 && selectedPoints.length < availablePoints.length && 
                                 ` • Studying ${selectedPoints.sort((a,b) => a-b).map(p => p+'pt').join(', ')} cards`
                             }
