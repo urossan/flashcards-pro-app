@@ -871,7 +871,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
         }
 
         // Continuous Study Mode - MODIFIED AS REQUESTED
-        function ContinuousStudyMode({ cards, onComplete, onExit }) {
+        function ContinuousStudyMode({ cards, selectedPoints = [], availablePoints = [], onComplete, onExit }) {
             const { state: { theme, settings } } = useFlashCards();
             const [currentIndex, setCurrentIndex] = useState(0);
             const [isPlaying, setIsPlaying] = useState(false);
@@ -982,6 +982,9 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         <h2 className="text-2xl font-bold mb-2">🎵 Continuous Study Mode</h2>
                         <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
                             Question and answer displayed together • Auto-play enabled
+                            {selectedPoints.length > 0 && selectedPoints.length < availablePoints.length && 
+                                ` • Studying ${selectedPoints.sort((a,b) => a-b).map(p => p+'pt').join(', ')} cards`
+                            }
                         </p>
                     </div>
                     
@@ -1576,11 +1579,15 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         card.answer.toLowerCase().includes(searchQuery.toLowerCase());
                     
                     const matchesCategory = !selectedCategory || card.category === selectedCategory;
-                    const matchesPoints = selectedPoints.length === 0 || selectedPoints.includes(card.points || 1);
+                    
+                    // If no points selected or all points selected, show all cards
+                    const matchesPoints = selectedPoints.length === 0 || 
+                                        selectedPoints.length === availablePoints.length || 
+                                        selectedPoints.includes(card.points || 1);
                     
                     return matchesSearch && matchesCategory && matchesPoints;
                 });
-            }, [cards, searchQuery, selectedCategory, selectedPoints]);
+            }, [cards, searchQuery, selectedCategory, selectedPoints, availablePoints]);
             
             const handleStudyComplete = (results) => {
                 addStudySession({
@@ -1676,9 +1683,13 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                     {availablePoints.length > 0 && (
                                         <div className="flex gap-2 overflow-x-auto pb-1">
                                             <button
-                                                onClick={() => setSelectedPoints([])}
+                                                onClick={() => {
+                                                    // If clicking All, select all available points
+                                                    setSelectedPoints(availablePoints);
+                                                }}
                                                 className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
-                                                    selectedPoints.length === 0
+                                                    selectedPoints.length === 0 || 
+                                                    selectedPoints.length === availablePoints.length
                                                         ? 'bg-blue-500 text-white'
                                                         : theme === 'dark'
                                                         ? 'bg-gray-800 text-gray-300'
@@ -1687,27 +1698,38 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                             >
                                                 All Points
                                             </button>
-                                            {availablePoints.map(pt => (
-                                                <button
-                                                    key={pt}
-                                                    onClick={() => {
-                                                        setSelectedPoints(prev =>
-                                                            prev.includes(pt)
-                                                                ? prev.filter(p => p !== pt)
-                                                                : [...prev, pt]
-                                                        );
-                                                    }}
-                                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
-                                                        selectedPoints.includes(pt)
-                                                            ? getPointsColor(pt)
-                                                            : theme === 'dark'
-                                                            ? 'bg-gray-800 text-gray-300'
-                                                            : 'bg-gray-200 text-gray-700'
-                                                    }`}
-                                                >
-                                                    {pt}pt
-                                                </button>
-                                            ))}
+                                            {availablePoints.map(pt => {
+                                                const isSelected = selectedPoints.includes(pt) || 
+                                                                 selectedPoints.length === 0 || 
+                                                                 selectedPoints.length === availablePoints.length;
+                                                return (
+                                                    <button
+                                                        key={pt}
+                                                        onClick={() => {
+                                                            if (selectedPoints.length === 0 || selectedPoints.length === availablePoints.length) {
+                                                                // If all are selected, clicking one deselects all others
+                                                                setSelectedPoints([pt]);
+                                                            } else if (selectedPoints.includes(pt)) {
+                                                                // Remove this point
+                                                                const newPoints = selectedPoints.filter(p => p !== pt);
+                                                                setSelectedPoints(newPoints);
+                                                            } else {
+                                                                // Add this point
+                                                                setSelectedPoints([...selectedPoints, pt]);
+                                                            }
+                                                        }}
+                                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
+                                                            isSelected
+                                                                ? getPointsColor(pt)
+                                                                : theme === 'dark'
+                                                                ? 'bg-gray-800 text-gray-300'
+                                                                : 'bg-gray-200 text-gray-700'
+                                                        }`}
+                                                    >
+                                                        {pt}pt
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
@@ -1865,12 +1887,19 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                     theme === 'dark' ? 'bg-gray-800' : 'bg-white'
                                 }`}>
                                     <h3 className="font-semibold mb-3">Select Points to Study</h3>
-                                    <p className="text-xs text-gray-500 mb-3">Click on a point value to study only those cards</p>
+                                    <p className="text-xs text-gray-500 mb-3">Click on point values to filter cards. Select multiple or click "All"</p>
                                     <div className={`grid grid-cols-3 gap-3`}>
                                         <button
-                                            onClick={() => setSelectedPoints([])}
+                                            onClick={() => {
+                                                // If clicking All, select all available points
+                                                const allPoints = [1, 2, 3, 4, 5, 6].filter(pt => 
+                                                    cards.some(c => (c.points || 1) === pt)
+                                                );
+                                                setSelectedPoints(allPoints);
+                                            }}
                                             className={`p-3 rounded-lg text-center transition-all ${
-                                                selectedPoints.length === 0
+                                                selectedPoints.length === 0 || 
+                                                selectedPoints.length === availablePoints.length
                                                     ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20'
                                                     : theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'
                                             }`}
@@ -1881,15 +1910,23 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                         {[1, 2, 3, 4, 5, 6].map(pt => {
                                             const count = cards.filter(c => (c.points || 1) === pt).length;
                                             if (count === 0) return null;
-                                            const isSelected = selectedPoints.includes(pt);
+                                            const isSelected = selectedPoints.includes(pt) || 
+                                                             selectedPoints.length === 0 || 
+                                                             selectedPoints.length === availablePoints.length;
                                             return (
                                                 <button
                                                     key={pt}
                                                     onClick={() => {
-                                                        if (isSelected) {
-                                                            setSelectedPoints([]);
-                                                        } else {
+                                                        if (selectedPoints.length === 0 || selectedPoints.length === availablePoints.length) {
+                                                            // If all are selected, clicking one deselects all others
                                                             setSelectedPoints([pt]);
+                                                        } else if (selectedPoints.includes(pt)) {
+                                                            // Remove this point
+                                                            const newPoints = selectedPoints.filter(p => p !== pt);
+                                                            setSelectedPoints(newPoints);
+                                                        } else {
+                                                            // Add this point
+                                                            setSelectedPoints([...selectedPoints, pt]);
                                                         }
                                                     }}
                                                     className={`p-3 rounded-lg text-center transition-all ${
@@ -1898,7 +1935,9 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                                             : 'hover:scale-105'
                                                     } ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}
                                                 >
-                                                    <div className={`text-xs px-2 py-1 rounded inline-block mb-1 ${getPointsColor(pt)}`}>
+                                                    <div className={`text-xs px-2 py-1 rounded inline-block mb-1 ${
+                                                        isSelected ? getPointsColor(pt) : 'bg-gray-300 text-gray-700'
+                                                    }`}>
                                                         {pt}pt
                                                     </div>
                                                     <div className="text-sm font-medium">{count} cards</div>
@@ -1916,9 +1955,9 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                     <p className={`text-sm mb-4 ${
                                         theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
                                     }`}>
-                                        {selectedPoints.length > 0 
-                                            ? `Study ${filteredCards.length} cards worth ${selectedPoints[0]} points`
-                                            : `Study all ${filteredCards.length} flashcards`
+                                        {selectedPoints.length === 0 || selectedPoints.length === availablePoints.length
+                                            ? `Study all ${filteredCards.length} flashcards`
+                                            : `Study ${filteredCards.length} cards (${selectedPoints.sort((a,b) => a-b).map(p => p+'pt').join(', ')})`
                                         }
                                     </p>
                                     
@@ -1965,6 +2004,8 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                         {(activeView === 'study' || activeView === 'cards') && isStudying && studyMode === 'continuous' && (
                             <ContinuousStudyMode
                                 cards={studyCards}
+                                selectedPoints={selectedPoints}
+                                availablePoints={availablePoints}
                                 onComplete={handleStudyComplete}
                                 onExit={() => {
                                     setIsStudying(false);
