@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1f2937">
-    <title>Flash Cards Pro v6.3</title>
+    <title>Flash Cards Pro v6.4</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -51,7 +51,8 @@
                 search: "🔍", plus: "➕", moon: "🌙", sun: "☀️", menu: "☰",
                 cards: "🎴", study: "📚", stats: "📊", edit: "✏️", delete: "🗑️",
                 check: "✅", x: "❌", clock: "⏰", volume: "🔊", brain: "🧠",
-                points: "🏆", loading: "⏳"
+                points: "🏆", loading: "⏳", question: "❓", answer: "💡",
+                lock: "🔒", unlock: "🔓", fire: "🔥", star: "⭐", sparkles: "✨"
             };
             return React.createElement('span', {
                 className: `inline-block ${className}`,
@@ -73,2123 +74,1327 @@
         class SpeechService {
             static currentUtterance = null;
             static isPlaying = false;
-            static isSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
-            
-            static speak(text, settings = {}) {
-                if (!this.isSupported || !settings.speechEnabled || !text?.trim()) return Promise.resolve();
-                
-                this.stop();
-                
-                return new Promise((resolve) => {
-                    try {
-                        const utterance = new SpeechSynthesisUtterance(text.trim());
-                        utterance.rate = Math.max(0.1, Math.min(10, settings.speechRate || 1.0));
-                        utterance.volume = 0.8;
-                        
-                        this.currentUtterance = utterance;
-                        this.isPlaying = true;
-                        
-                        utterance.onend = () => {
-                            this.currentUtterance = null;
-                            this.isPlaying = false;
-                            resolve();
-                        };
-                        
-                        utterance.onerror = () => {
-                            this.currentUtterance = null;
-                            this.isPlaying = false;
-                            resolve();
-                        };
-                        
-                        window.speechSynthesis.speak(utterance);
-                        
-                        // Fallback timeout
-                        setTimeout(() => {
-                            if (this.currentUtterance === utterance) {
-                                this.stop();
-                                resolve();
-                            }
-                        }, text.length * 100 + 5000);
-                        
-                    } catch (error) {
-                        this.currentUtterance = null;
-                        this.isPlaying = false;
-                        resolve();
-                    }
-                });
-            }
-            
-            static stop() {
-                if (this.isSupported) {
-                    try {
-                        window.speechSynthesis.cancel();
-                        // Double cancel to ensure it stops
-                        window.speechSynthesis.cancel();
-                    } catch (error) {
-                        // Silent fail
-                    }
-                    this.currentUtterance = null;
-                    this.isPlaying = false;
-                }
-            }
-        }
 
-        // Continuous Study Service - Fixed
-        class ContinuousStudyService {
-            static isRunning = false;
-            static isPaused = false;
-            static currentTimeout = null;
-            static onStop = null;
-            
-            static async speakAndWait(text, settings, additionalPause = 0) {
-                if (!this.isRunning || this.isPaused) return;
-                
+            static speak(text, callback) {
+                if (!window.speechSynthesis) {
+                    console.error('Speech synthesis not supported');
+                    return;
+                }
+
+                if (this.isPlaying) {
+                    this.stop();
+                }
+
                 try {
-                    await SpeechService.speak(text, settings);
-                    if (!this.isRunning || this.isPaused) return;
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.rate = 0.9;
+                    utterance.pitch = 1;
+                    utterance.volume = 1;
                     
-                    if (additionalPause > 0) {
-                        await new Promise(resolve => {
-                            this.currentTimeout = setTimeout(() => {
-                                if (!this.isPaused) resolve();
-                            }, additionalPause);
-                        });
+                    // Set voice preferences
+                    const voices = window.speechSynthesis.getVoices();
+                    const preferredVoices = voices.filter(voice => 
+                        voice.lang.startsWith('en') && voice.name.includes('Female')
+                    );
+                    if (preferredVoices.length > 0) {
+                        utterance.voice = preferredVoices[0];
                     }
+
+                    utterance.onstart = () => {
+                        this.isPlaying = true;
+                    };
+
+                    utterance.onend = () => {
+                        this.isPlaying = false;
+                        this.currentUtterance = null;
+                        if (callback) callback();
+                    };
+
+                    utterance.onerror = (event) => {
+                        console.error('Speech error:', event);
+                        this.isPlaying = false;
+                        this.currentUtterance = null;
+                        if (callback) callback();
+                    };
+
+                    this.currentUtterance = utterance;
+                    window.speechSynthesis.speak(utterance);
                 } catch (error) {
-                    console.warn('Speech error:', error);
+                    console.error('Speech synthesis error:', error);
+                    this.isPlaying = false;
+                    if (callback) callback();
                 }
             }
-            
-            static start(onStopCallback) {
-                this.isRunning = true;
-                this.isPaused = false;
-                this.onStop = onStopCallback;
-            }
-            
-            static pause() {
-                this.isPaused = true;
-                SpeechService.stop();
-                if (this.currentTimeout) {
-                    clearTimeout(this.currentTimeout);
-                    this.currentTimeout = null;
-                }
-            }
-            
-            static resume() {
-                this.isPaused = false;
-            }
-            
+
             static stop() {
-                this.isRunning = false;
-                this.isPaused = false;
-                SpeechService.stop();
-                if (this.currentTimeout) {
-                    clearTimeout(this.currentTimeout);
-                    this.currentTimeout = null;
+                if (window.speechSynthesis && this.isPlaying) {
+                    window.speechSynthesis.cancel();
+                    this.isPlaying = false;
+                    this.currentUtterance = null;
                 }
-                if (this.onStop) {
-                    this.onStop();
-                }
-                this.onStop = null;
             }
         }
 
-        // Context
-        const FlashCardsContext = createContext(null);
+        // FlashCards Context
+        const FlashCardsContext = createContext();
+
+        function FlashCardsProvider({ children }) {
+            const [cards, setCards] = useState(() => {
+                const saved = localStorage.getItem('flashCards');
+                return saved ? JSON.parse(saved) : [];
+            });
+
+            const [studyProgress, setStudyProgress] = useState(() => {
+                const saved = localStorage.getItem('studyProgress');
+                return saved ? JSON.parse(saved) : {};
+            });
+
+            const [theme, setTheme] = useState(() => {
+                const saved = localStorage.getItem('theme');
+                return saved || 'light';
+            });
+
+            useEffect(() => {
+                localStorage.setItem('flashCards', JSON.stringify(cards));
+            }, [cards]);
+
+            useEffect(() => {
+                localStorage.setItem('studyProgress', JSON.stringify(studyProgress));
+            }, [studyProgress]);
+
+            useEffect(() => {
+                localStorage.setItem('theme', theme);
+                if (theme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            }, [theme]);
+
+            const addCard = (card) => {
+                const newCard = {
+                    id: Date.now(),
+                    createdAt: new Date().toISOString(),
+                    lastReview: null,
+                    reviewCount: 0,
+                    points: 1,
+                    ...card
+                };
+                setCards(prev => [...prev, newCard]);
+            };
+
+            const updateCard = (id, updates) => {
+                setCards(prev => prev.map(card => 
+                    card.id === id ? { ...card, ...updates } : card
+                ));
+            };
+
+            const deleteCard = (id) => {
+                setCards(prev => prev.filter(card => card.id !== id));
+                setStudyProgress(prev => {
+                    const newProgress = { ...prev };
+                    delete newProgress[id];
+                    return newProgress;
+                });
+            };
+
+            const recordStudyResult = (cardId, correct) => {
+                const timestamp = new Date().toISOString();
+                setStudyProgress(prev => ({
+                    ...prev,
+                    [cardId]: {
+                        ...prev[cardId],
+                        attempts: [...(prev[cardId]?.attempts || []), { timestamp, correct }],
+                        lastReview: timestamp
+                    }
+                }));
+                
+                updateCard(cardId, {
+                    lastReview: timestamp,
+                    reviewCount: (cards.find(c => c.id === cardId)?.reviewCount || 0) + 1
+                });
+            };
+
+            const getCardStats = (cardId) => {
+                const progress = studyProgress[cardId];
+                if (!progress?.attempts) return { accuracy: 0, attempts: 0 };
+                
+                const attempts = progress.attempts;
+                const correct = attempts.filter(a => a.correct).length;
+                return {
+                    accuracy: attempts.length > 0 ? (correct / attempts.length) * 100 : 0,
+                    attempts: attempts.length,
+                    lastReview: progress.lastReview
+                };
+            };
+
+            const toggleTheme = () => {
+                setTheme(prev => prev === 'light' ? 'dark' : 'light');
+            };
+
+            const value = {
+                cards,
+                addCard,
+                updateCard,
+                deleteCard,
+                recordStudyResult,
+                getCardStats,
+                studyProgress,
+                theme,
+                toggleTheme
+            };
+
+            return React.createElement(
+                FlashCardsContext.Provider,
+                { value },
+                children
+            );
+        }
+
         const useFlashCards = () => {
             const context = useContext(FlashCardsContext);
-            if (!context) throw new Error('useFlashCards must be used within FlashCardsProvider');
+            if (!context) {
+                throw new Error('useFlashCards must be used within FlashCardsProvider');
+            }
             return context;
         };
 
-        // Storage Service - Fixed
-        class StorageService {
-            static STORAGE_KEY = 'flashcards-pro-v63';
-            static VERSION = '6.3';
-            
-            static save(state) {
-                try {
-                    const data = { 
-                        ...state, 
-                        categories: Array.from(state.categories),
-                        version: this.VERSION
-                    };
-                    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
-                    return true;
-                } catch (error) {
-                    console.error('Failed to save data:', error);
-                    return false;
-                }
-            }
-            
-            static load() {
-                try {
-                    const data = localStorage.getItem(this.STORAGE_KEY);
-                    if (!data) return null;
-                    const parsed = JSON.parse(data);
-                    return { ...parsed, categories: new Set(parsed.categories || []) };
-                } catch (error) {
-                    console.error('Failed to load data:', error);
-                    return null;
-                }
-            }
-            
-            static exportData(state) {
-                try {
-                    const data = {
-                        version: this.VERSION,
-                        exported: new Date().toISOString(),
-                        ...state,
-                        categories: Array.from(state.categories),
-                    };
-                    
-                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `flashcards-v${this.VERSION}-${new Date().toISOString().split('T')[0]}.json`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    return true;
-                } catch (error) {
-                    console.error('Export failed:', error);
-                    return false;
-                }
-            }
-            
-            static async importData(file, onSuccess, onError) {
-                try {
-                    if (!file) {
-                        onError('No file selected');
-                        return;
-                    }
-                    
-                    const text = await file.text();
-                    
-                    // Try JSON first
-                    try {
-                        const data = JSON.parse(text);
-                        if (data.cards && Array.isArray(data.cards)) {
-                            onSuccess(data);
-                            return;
-                        }
-                    } catch (e) {
-                        // Try Q&A format
-                    }
-                    
-                    // Parse Q&A text format
-                    const cards = this.parseQAText(text);
-                    if (cards.length > 0) {
-                        onSuccess({
-                            cards,
-                            categories: new Set(['Crane Questions']),
-                            studySessions: [],
-                            cardProgress: {},
-                        });
-                    } else {
-                        onError('No valid questions found in file');
-                    }
-                } catch (error) {
-                    onError('Failed to read file: ' + error.message);
-                }
-            }
-            
-            static parseQAText(text) {
-                const cards = [];
-                const lines = text.split('\n');
-                let currentQuestion = '';
-                let currentAnswer = '';
-                let isAnswer = false;
-                let questionNumber = 1;
-                
-                for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i].trim();
-                    
-                    if (line.match(/^Q\d+\)/)) {
-                        // Save previous card
-                        if (currentQuestion && currentAnswer) {
-                            const pointsMatch = currentQuestion.match(/\((\d+)pt\)/);
-                            const points = pointsMatch ? parseInt(pointsMatch[1]) : 1;
-                            
-                            cards.push({
-                                id: questionNumber.toString(),
-                                question: currentQuestion.replace(/\(\d+pt\)/, '').trim(),
-                                answer: currentAnswer.trim(),
-                                category: 'Crane Questions',
-                                tags: [],
-                                points: points,
-                                media: [],
-                                created: new Date().toISOString(),
-                                lastStudied: null,
-                                nextReview: null,
-                                timesStudied: 0,
-                                timesCorrect: 0,
-                                easeFactor: 2.5,
-                                interval: 0,
-                                repetitions: 0,
-                                lapses: 0
-                            });
-                            questionNumber++;
-                        }
-                        
-                        currentQuestion = line;
-                        currentAnswer = '';
-                        isAnswer = false;
-                    } else if (line.startsWith('Answer:')) {
-                        isAnswer = true;
-                        currentAnswer = line.replace('Answer:', '').trim();
-                    } else if (line.length > 0) {
-                        if (!isAnswer && currentQuestion) {
-                            currentQuestion += (currentQuestion ? '\n' : '') + line;
-                        } else if (isAnswer) {
-                            currentAnswer += (currentAnswer ? '\n' : '') + line;
-                        } else {
-                            currentQuestion += (currentQuestion ? '\n' : '') + line;
-                        }
-                    }
-                }
-                
-                // Last card
-                if (currentQuestion && currentAnswer) {
-                    const pointsMatch = currentQuestion.match(/\((\d+)pt\)/);
-                    const points = pointsMatch ? parseInt(pointsMatch[1]) : 1;
-                    
-                    cards.push({
-                        id: questionNumber.toString(),
-                        question: currentQuestion.replace(/\(\d+pt\)/, '').trim(),
-                        answer: currentAnswer.trim(),
-                        category: 'Crane Questions',
-                        tags: [],
-                        points: points,
-                        media: [],
-                        created: new Date().toISOString(),
-                        lastStudied: null,
-                        nextReview: null,
-                        timesStudied: 0,
-                        timesCorrect: 0,
-                        easeFactor: 2.5,
-                        interval: 0,
-                        repetitions: 0,
-                        lapses: 0
-                    });
-                }
-                
-                return cards;
-            }
-        }
-
-        // Default cards - ALL 78 questions from the document
-        const createDefaultCards = () => {
-            const rawData = `Q1)Explain why MUST there be a safe system of work.(3pt)
-Answer: It is a LEGAL requirement under the HASWA 1974.
-
-Q2)a) State the legislation and the regulation therein that refers to the stability of cranes and b) Which regulation states the requirement for all lifting operations to be properly planned?(2pt)
-Answer: a) LOLER Regulation 4
-b) LOLER Regulation 8
-
-Q3) a) State the regulation number for the lifting of persons under LOLER 1998 and b) List FIVE requirements to be within a procedure.(6pt)
-Answer: a)LOLER Regulation 5
-b) 1. Has suitable devices to prevent the risk of carrier falling
-2. A person trapped in any carrier can be freed
-3. The carrier has an enhanced safety coefficient suspension rope or chain
-4. The rope or chain is inspected by a competent person every working day
-5. The use of carrier clearly marked for personnel use
-
-Q4)a) What is the 'Factor of Safety' when lifting personnel and
-b) What needs to be taken into account with wind speeds?(1pt)
-Answer: a) 2:1
-b) maximum wind speeds of 7m/s
-
-Q5)How does the guidance in LOLER 1998 (L 113) describe the difference between installed and positioned?(4pt)
-Answer: Installed – fixed in location (tower crane)
-Positioned – manoeuvred in to place (mobile crane)
-
-Q6)a) What is the minimum recommended distance that is allowed between the counterweight(s) of any lifting equipment and an object/structure and
-b) What measure must be taken if the distance is less?(4pt)
-Answer: a) Minimum 600 mm.
-b) Prevent access
-
-Q7)Who has overall control of the lifting operation?(1pt)
-Answer: The Appointed Person
-
-Q8)What IS the definition of a competent person as stated by Codes of Practice?(1pt)
-Answer: A person who has practical and theoretical knowledge as well as planning experience of crane and equipment.
-
-Q9)Which part of BS 7121 is specific to mobile cranes?(1pt)
-Answer: Sections 2-3
-
-Q10)When a crane company hires out a crane, name TWO main legal requirements the hire company must meet regarding the crane and operator.(2pt)
-Answer: 1. A competent trained operator
-2. Correct and up-to-date certification
-
-Q11)Explain the difference between an employing and user organisation.(2pt)
-Answer: Employing Organisation requires the load to be lifted 
-User Organisation and plan and manoeuvres the lift for the client.
-
-Q12)Who is responsible for providing the contractor with written details of the work to be done?(1pt)
-Answer: The Employing Organisation
-
-Q13)Where would the information relating to the additional requirements of an intermediate lift over a basic lift be sought?(1pt)
-Answer: Explained in BS 7121, 4.3.2 for basic lift, 4.3.3. for intermediate/standard lift
-
-Q14)To whom should the appointed person give all details involving the lifting
-operation?(1pt)
-Answer: Crane supervisor and anyone involved.
-
-Q15)Why is it recommended to complete a report after the completion of the lifting operation?(2pt)
-Answer: To evaluate the lifting operation where good practice can be utilized in future lifts or where the operation could have been planned more effectively. The client/contractor may further require written feedback on the operation.
-
-Q16)A change of crane lifting equipment operator is required. What must they be made aware of before continuing?(2pt)
-Answer: The lift plan and any other relevant issue.
-
-Q17) Name TWO duties of the crane operator.(2pt)
-Answer: I. Operate crane according to manufactures instructions
-2. Implement the lift plan and safe system of work
-
-Q18)Describe FOUR factors that need to be taken into account when specifying communication procedures for a lifting operation.(4pt)
-Answer: 1. Communication method established before the lift
-2. Banksman/Signaller shall be visible/audible at all times
-3. The operator shall obey stop signals whoever gives them
-4. The Person in Charge shall be clearly identified and made known to all members of the lift team and personnel in the proximity.
-
-Q19)If radios are to be used during the lifting operations, what FIVE actions and checks must be made before use?(5pt)
-Answer: 1. Check if people involved know how to use them
-2. Check if batteries will last for the duration of the operation or spare batteries are supplied
-3. Check if all involved in the lifting are on the same frequency (channel)
-4. Check if the signal strength is sufficient
-5. Check if the frequency is clear from other interferences
-
-Q20)Name the FOUR stages of the hierarchy of control for the marshalling of mobile lifting equipment.(4pt)
-Answer: 1. Elimination/substitution
-2. Engineering
-3. Administration
-4. PPE
-
-Q21)Name THREE factors to be taken into account when devising a mobile lifting equipment marshalling plan.(3pt)
-Answer: 1. Visibility
-2. Attaching / Detaching and securing loads
-3. Environment
-
-Q22)Name THREE possible effects that fatigue can have on a lifting team (3pt)
-Answer: 1. Decreased productivity
-2. Reduced safe working ability
-3. Absenteeism
-
-Q23)Name SIX principle factors should be taken into account in relation to
-fatigue management of a lifting operation.(6pt)
-Answer: 1. Comply with your organization's policies and procedures relating fatigue
-2. Understand your sleep, rest and recovery needs and obtain adequate rest and sleep away from work
-3. Seek medical advice and assistance if you have a concern about a health condition that affects your sleep or causes fatigue
-4. Look out for signs of fatigue at the people you work with
-5. In consultations with your supervisor, take steps to manage fatigue
-6. Maintain hydration
-
-Q24)State THREE occasions on which lifting equipment must be thoroughly examined.(3pt)
-Answer: 1. When lifting equipment is first supplied (used for the first time by the
-employer)
-2. When certain equipment is installed (e.g. tower crane)
-3. Periodically during the lifetime of the equipment
-4. Following exceptional circumstances
-
-Q25)How long is a thorough examination for a lifting accessory valid for?(1pt)
-Answer: 6 months.
-
-Q26)Name FOUR items that must be recorded when a thorough examination on a lifting appliance has been carried out.(4pt)
-Answer: 1. Defects
-2. SWL
-3. Model of the machine
-4. Examination location
-
-Q27)List TWO methods of obtaining the accurate weight of a load.(2pt)
-Answer: 1. Manufacturer's data
-2. Trial lift (using a weight load cell)
-
-Q28)During dismantling operations, what factor of safety is applied to the load?(1pt)
-Answer: Minimum of 20%
-
-Q29)If an object has to be dismantled above ground to be lifted to ground level (and can't be returned to the original position), what factor of safety should be applied?(1pt)
-Answer: 2:1
-
-Q30)Name THREE factors(configurations) that determine the rated lifting capacity of lifting equipment.(3pt)
-Answer: 1. Boom angle
-2. Spread of outriggers
-3. The radius
-
-Q31)What does the term 'structural strength' relate to with regard to the lifting capacity of any lifting equipment?(1pt)
-Answer: Structural strength refers to where the maximum SWL is limited by the structural strength of all relevant components. Example boom, outriggers, slew ring, chassis .
-
-Q32)Name the sections in 7121 where advice is given on 'Lifting without outriggers' and 'Pick and carry'.(1pt)
-Answer: 12.1.5 Lifting without outriggers
-12.1.6 Pick and Carry
-
-Q33)Define the term 'radius'.(1pt)
-Answer: The radius is the horizontal distance between the points at which the centre of rotation meets the ground and the vertical centre line passing through the load lifting attachment.
-
-Q34)If a crane is out of level, what effect will it have on the radius?(2pt)
-Answer: Increase on low side, decrease on high side.
-
-Q35)What is the definition of the term "outreach"?(1pt)
-Answer: The horizontal measurement from the centre of the hook block to the nearest part of the crane (excluding boom).
-
-Q36)If a load of 20 tonnes is lifted on four falls of rope, what is the tension in each fall?(1pt)
-Answer: 20 tonnes / 4 falls = 5 tonnes each fall
-
-Q37)What advantage is gained by increasing the number of falls on a hook block?(1pt)
-Answer: Increasing the falls could increase lifting capacity (for a particular configuration).
-
-Q38)State the safe procedure to be followed before lifting or lowering a load down a shaft or excavation.(2pt)
-Answer: The empty hook must be lowered down to working level and the hoist drum checked for sufficient turns on the drum.
-
-Q39)When planning a lifting operation to place loads below ground level, what needs to be taken into account when calculating the gross weight of the load?(2pt)
-Answer: The weight of the rope below ground level will need to be factored into the gross weight of the load.
-
-Q40)Explain the purpose of the over-hoist limit switch?(1pt)
-Answer: To stop the hook from hitting the boom head.
-
-Q41)What are the types of warning indicated by RCI and at what point are they activated?(2pt)
-Answer: AMBER 90-97.6%
-RED light with external alarm 102.5-110%
-
-Q42)a) Where would the duty board of a tower crane normally be located and
-b) Name FOUR types of information that it must contain (5pt)
-Answer: a) Located at the base of the tower crane
-b)
-1. Make
-2. Model
-3. Serial number
-4. Capacity at maximum radius
-
-Q43)How could the deflection of a boom or jib on a mobile-type crane affect a lift? (2pt)
-Answer: The boom deflection can cause an increase in the radius.
-
-Q44)Why must a lifting equipment operator never try to,' and 'drag' a load? (2pt)
-Answer: Because it can induce side loading on the boom (for which it wasn't designed) and can cause structural failure.
-
-Q45)On mobile and crawler cranes, in what situation can a single load be lifted using the fly jib hook block & min book hook block simultaneously?(1pt)
-Answer: If it is stated by the manufacturer.
-
-Q46)On both tracked and wheeled 360 degree excavators:(2pt)
-a) What differs between lifting over the side of the machine compared to lifting the front or the rear of the machine?
-b) Explain why.
-Answer: a) Increased stability when lifting over the front and back, over the side a reduction of capacity
-b) Reduced stability base
-
-Q47)Name FOUR factors relating to ground that a ground engineer would need to taken into account when determining the load bearing capacity of ground (4pt)
-Answer: 1. Ability of the ground to support the gross weight of the machine and load
-2. Integrity of adjacent ground to withstand lateral stresses imposed
-3. Levelling and preparation
-4. Underground services
-
-Q48)The area of mat size has been correctly specified for use with the outriggers of a mobile crane and the intended load and operating radius but the pad not stiff or rigid enough (e.g. it is too thin). Explain the possible consequence.(2pt)
-Answer: The mat will be unable to spread the outrigger point load uniformly and will risk sinking in and destabilizing the crane.
-
-Q49)Identify FOUR requirements for ensuring the stability of mobile cranes on site.(4pt)
-Answer: 1. Firm/level standing
-2. All outriggers extended accordingly
-3. Crane level both longitudinally and transversely
-4. All wheels clear of the ground
-5. Crane not overloaded
-
-Q50)Outline the role of the Temporary Works Coordinator.(2pt)
-Answer: 1. Co-ordinate all temporary works activities
-2. Ensure a temporary works register is established and maintained
-3. Ensure that responsibilities are accepted
-4. Ensure that a design brief is prepared with the actual situation on site
-
-Q51)Who is responsible for compiling all necessary documentation when lifting close proximity to a site boundary? E.g. protection fans?(1pt)
-Answer: Temp works coordinator
-
-Q52)A platform is being used to receive lifted loads of materials. What primary procedure must be in place to ensure that the platform being used is suitable and sufficient to hold the weight of the load?(1pt)
-Answer: Temporary works design.
-
-Q53)What are the THREE key fundamental aspects that need considering when preparing a design for any temporary works design/structure?(3pt)
-Answer: 1. foundation
-2. structure
-3. stability
-
-Q54)List FOUR items of information that must be included on a temporary works register.(4pt)
-Answer: 1. Design Checker
-2. Date design complete
-3. Date design checked/approved
-4. Erection complete and checked or "Permit to Load", "Permit to Dismantle"
-
-Q55)a) What is the recommended minimum exclusion zone around overhead power lines,(6pt)
-b) Where can this information be sourced and
-c) Explain why a distance from overhead power lines should be kept.
-Answer: a) 	275KW-400KW 7M
-	132KW 6M
-	11KW-33KW 3M
-	Low voltage 1M
-b) BS6 HSE
-c) Because electricity can arch across large gaps
-
-Q56)When planning a lift near a slope, what is the minimum distance to be kept between the supporting components of the lifting equipment and the slope?(2pt)
-Answer: Edge of the mat to the edge of the slope should be double of height of slope.
-
-Q57)If planning to lift loads In or near a pedestrianized area, what main factor needs to be taken into account?(2pt)
-Answer: Physical segregation of pedestrians from overhead loads. Create an exclusion zone.
-
-Q58)Two cranes are working in the same vicinity that encroach the operating radius of each. What actions should the lift plan or method statement normally specify?(3pt)
-Answer: Have crane coordinator in place or anti-collision and crash radios.
-
-Q59)In what circumstances would aviation warning lighting be required to high -type lifting equipment?(2pt)
-Answer: If the lifting equipment is within 6km of an aerodrome and the overall height exceeds 10 metres above nearby existing structures and trees.
-
-Q60)Identify 4 types of infrastructure where a responsible body or owner would have to be notified when planning a lift on or near by.(4pt)
-Answer: 1. Rivers
-2. Airfields
-3. Highways
-4. Railways
-5. Live plant
-
-Q61)Name a design of accessory hook that is exempt from being fitted with a safety catch.(1pt)
-Answer: A 'C' type Hook.
-
-Q62)Name THREE markings found on multiple-leg slings.(3pt)
-Answer: 1. SWL (WLL)
-2. Manufactures name
-3. Serial number
-
-Q63)State the maximum recommended included angle for single-leg slings when used as a pair.(1pt)
-Answer: Maximum 90 degrees.
-
-Q64)Give TWO methods of obtaining the centre of gravity on an unbalanced load.(2pt)
-Answer: 1. Calculation
-2. Trial lift
-
-Q65)In which applications are single leg slings rated with their own SWL (WLL)?(1pt)
-Answer: Only when used vertically.
-
-Q66)How is the SWL/WLL/rated capacity for multi-legs slings determined?(1pt)
-Answer: By the Uniform Load method.
-
-Q67)To lift a load of 20 tonnes on a 4 single leg chain sling, what is the required SWL (WLL) for each leg with an included angle of 87 degrees?(4pt)
-Please explain your calculation.
-Answer: 1. 9.52 tonnes/each leg
-2. When using 4 leg chain sling the same calculation as 3 leg chain sling is used because it is considered that not all 4 legs are taking the weight equal. So: 20 tonnes divided by 2.1 (mod factor for 3 legs and 87 degrees angle) = 9.52 tonne each leg. 4x10 slings needed.
-
-Q68)How should multiple accessories be connected to a crane hook?(1pt)
-Answer: Using a master ring and bow shackles.
-
-Q69)State SIX environmental factors that can affect an external lifting operation.(6pt)
-Answer: 1. wind
-2. Fog
-3. Mist
-4. Excessive rain
-5. Lightning
-6. Storms
-7. Ice and snow
-
-Q70)Name FOUR factors should be taken into account when calculating the effects of wind on a crane-based lifting operation(4pt)
-Answer: 1. The geometry and shape of the load
-2. The height to which the load is to be lifted
-3. The wind direction
-4. Operating between structures
-
-Q71)Give THREE examples of how excessive rain can affect an external lifting operation when using lifting equipment.(3pt)
-Answer: 1. Excessive rain can cause the ground to soften reducing the crane support
-2. Poor visibility
-3. Cause slippery conditions and reduce traction
-
-Q72) Outline THREE principle requirements for out of service procedures for tower cranes.(3pt)
-Answer: 1. Remove accessories and jib in free slew
-2. Out of radius of other cranes and obstructions
-3. Lock up and isolate crane
-
-Q73)Using the given lifting capacity diagram for the JC8 525/125 telescopic handler using a hook (A61):(4pt)
-a) What is the maximum lifting capacity?
-b) What is the maximum lifting capacity when free on wheels (FOW)
-c) What the maximum hook height where a load can be lifted
-d) What is the maximum lifting capacity when the hook is at a height of 8m and the boom at an angle of 4Sdegrees?
-Answer: a) 3500 kg
-b) 0kg
-c) 10m
-d) 1000kg
-
-Q74)What does the helth and safety at work act require employers to do regards spcificaly to plant?(3pt)
-Answer: Provide and maintain plant that is safe and without risk to health so far as is resonably practicable.
-
-Q75) Name two possible penalties for not folowing local requirements. (2pt)
-Answer: fines or imprisonment
-
-Q76) When planning a lift for a lory loader activity and where it is adjacent to a slope, what is regarded as the minimum distance to be kept from a  sloped edge?(2pt)
-Answer: The horizonal distance from the foot to the top of the slope should be at least the distance from the top of the slope to the lory.
-
-Q77) What is the main aim of HASWA 1974 ? (2pt)
-Answer: To create a safe system of work.
-
-Q78) What is a load radious indicator?(1pt)
-Answer: A divice fitted to a crane that shows the radius at witch the crane is operating and is coresponding SWL (WLL)`;
-            
-            return StorageService.parseQAText(rawData);
-        };
-
-        // Points color scheme
-        const getPointsColor = (points) => {
-            if (points <= 2) return 'bg-green-500 text-white';
-            if (points <= 4) return 'bg-blue-500 text-white';
-            return 'bg-red-500 text-white';
-        };
-
-        // Card Component
-        function MobileCardItem({ card, onEdit, onDelete, onStudy }) {
-            const { state: { theme } } = useFlashCards();
-            const [showActions, setShowActions] = useState(false);
-            
-            return (
-                <div className={`relative mb-3 rounded-xl border transition-all cursor-pointer ${
-                    theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-                }`}>
-                    <div className="p-4" onClick={() => setShowActions(!showActions)}>
-                        <div className="flex justify-between items-start mb-2">
-                            <h4 className="font-medium text-base leading-tight pr-2 flex-1">{card.question}</h4>
-                            <span className={`text-sm px-2.5 py-1 rounded flex-shrink-0 font-bold ${getPointsColor(card.points || 1)}`}>
-                                {card.points || 1}
-                            </span>
-                        </div>
-                        
-                        <p className={`text-sm mb-3 line-clamp-2 ${
-                            theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                            {card.answer}
-                        </p>
-                        
-                        <div className="flex flex-wrap gap-1">
-                            {card.category && (
-                                <span className={`text-xs px-2 py-1 rounded ${
-                                    theme === 'dark' ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-700'
-                                }`}>
-                                    {card.category}
-                                </span>
-                            )}
-                        </div>
-                    </div>
-                    
-                    {showActions && (
-                        <div className={`flex border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onStudy(); }}
-                                className={`flex-1 py-3 px-4 text-sm font-medium text-blue-500 ${
-                                    theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
-                                } border-r ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}
-                            >
-                                Study
-                            </button>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                                className={`flex-1 py-3 px-4 text-sm font-medium ${
-                                    theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
-                                } border-r ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}
-                            >
-                                Edit
-                            </button>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                className={`flex-1 py-3 px-4 text-sm font-medium text-red-500 ${
-                                    theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
-                                }`}
-                            >
-                                Delete
-                            </button>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        // Study Card Component - Fixed
-        function MobileStudyCard({ card, isFlipped, onFlip }) {
-            const { state: { theme, settings } } = useFlashCards();
-            const cleanQuestion = card.question.replace(/^Q\d+\)\s*/, '');
-            const lastCardId = useRef(null);
-            
-            // Read question when new card appears (not flipped)
-            useEffect(() => {
-                // Only speak if this is a new card and we're showing the question side
-                if (card.id !== lastCardId.current && !isFlipped) {
-                    lastCardId.current = card.id;
-                    
-                    if (settings.speechEnabled && settings.autoReadQuestion) {
-                        // Small delay to ensure component is mounted and previous speech stopped
-                        const timer = setTimeout(() => {
-                            SpeechService.speak(cleanQuestion, settings);
-                        }, 300);
-                        return () => clearTimeout(timer);
-                    }
-                }
-            }, [card.id, isFlipped]); // Simplified dependencies
-            
-            // Cleanup on unmount
-            useEffect(() => {
-                return () => {
-                    SpeechService.stop();
-                };
-            }, []);
-            
-            const handleCardClick = () => {
-                SpeechService.stop();
-                
-                // Determine what to read BEFORE flipping
-                const willReadAnswer = !isFlipped && settings.autoReadAnswer;
-                const willReadQuestion = isFlipped && settings.autoReadQuestion;
-                
-                onFlip();
-                
-                // Speech after flip animation completes
-                if (settings.speechEnabled) {
-                    setTimeout(() => {
-                        if (willReadAnswer) {
-                            SpeechService.speak(card.answer, settings);
-                        } else if (willReadQuestion) {
-                            SpeechService.speak(cleanQuestion, settings);
-                        }
-                    }, 600);
-                }
-            };
-            
-            return (
-                <div className="relative w-full h-[28rem] perspective-1000">
-                    <div 
-                        className={`relative w-full h-full transition-transform duration-500 transform-style-preserve-3d cursor-pointer ${
-                            isFlipped ? 'rotate-y-180' : ''
-                        }`}
-                        onClick={handleCardClick}
-                    >
-                        {/* Question Side */}
-                        <div className={`absolute inset-0 backface-hidden rounded-2xl p-8 flex flex-col ${
-                            theme === 'dark' 
-                                ? 'bg-gradient-to-br from-gray-800 to-gray-900 text-white' 
-                                : 'bg-gradient-to-br from-white to-gray-100'
-                        } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                            
-                            <div className="absolute top-4 right-4">
-                                <span className={`text-sm px-2.5 py-1 rounded-full font-bold ${
-                                    theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
-                                }`}>
-                                    {card.points || 1}
-                                </span>
-                            </div>
-                            
-                            <div className="flex-1 overflow-y-auto px-2 py-4 flex items-center justify-center">
-                                <div className="text-center w-full">
-                                    <h2 className="text-lg font-medium leading-relaxed">{cleanQuestion}</h2>
-                                </div>
-                            </div>
-                            
-                            <div className="text-center text-sm opacity-70 flex-shrink-0 mt-6">
-                                Tap to reveal answer
-                            </div>
-                        </div>
-                        
-                        {/* Answer Side */}
-                        <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-2xl p-8 flex flex-col ${
-                            theme === 'dark' 
-                                ? 'bg-gradient-to-br from-blue-900 to-blue-800 text-white' 
-                                : 'bg-gradient-to-br from-blue-50 to-blue-100'
-                        } shadow-xl border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                            
-                            <div className="absolute top-4 right-4">
-                                <span className={`text-sm px-2.5 py-1 rounded-full font-bold ${
-                                    theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
-                                }`}>
-                                    {card.points || 1}
-                                </span>
-                            </div>
-                            
-                            <div className="flex-1 overflow-y-auto px-2 py-4 flex items-start justify-center">
-                                <div className="text-center w-full">
-                                    <h2 className="text-lg font-medium leading-relaxed whitespace-pre-line">{card.answer}</h2>
-                                </div>
-                            </div>
-                            
-                            <div className="text-center text-sm opacity-70 flex-shrink-0 mt-6">
-                                Tap to show question
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        // Continuous Study Mode - Updated with randomization
-        function ContinuousStudyMode({ cards, onComplete, onExit }) {
-            const { state: { theme, settings } } = useFlashCards();
-            const [currentIndex, setCurrentIndex] = useState(0);
-            const [isPlaying, setIsPlaying] = useState(false);
-            const [isPaused, setIsPaused] = useState(false);
-            const [phase, setPhase] = useState('ready');
-            const [displayContent, setDisplayContent] = useState('');
-            const [startTime] = useState(Date.now());
-            const [studyOrder, setStudyOrder] = useState([]);
-            
-            const currentCard = studyOrder[currentIndex] || cards[currentIndex];
-            const progress = ((currentIndex + 1) / cards.length) * 100;
-            
-            useEffect(() => {
-                return () => {
-                    ContinuousStudyService.stop();
-                };
-            }, []);
-            
-            const startContinuousStudy = async () => {
-                setIsPlaying(true);
-                setIsPaused(false);
-                setCurrentIndex(0);
-                
-                // Randomize cards if enabled
-                const order = settings.randomizeOrder ? shuffleArray(cards) : cards;
-                setStudyOrder(order);
-                
-                ContinuousStudyService.start(() => {
-                    setIsPlaying(false);
-                    setIsPaused(false);
-                    setPhase('ready');
-                    setDisplayContent('');
-                });
-                
-                await runContinuousStudy(order);
-            };
-            
-            const runContinuousStudy = async (cardsToStudy) => {
-                try {
-                    for (let i = 0; i < cardsToStudy.length; i++) {
-                        if (!ContinuousStudyService.isRunning || ContinuousStudyService.isPaused) {
-                            break;
-                        }
-                        
-                        const card = cardsToStudy[i];
-                        const cleanQuestion = card.question.replace(/^Q\d+\)\s*/, '');
-                        
-                        setCurrentIndex(i);
-                        
-                        // Points
-                        const pointsText = `${card.points || 1} point${(card.points || 1) > 1 ? 's' : ''}`;
-                        setPhase('intro');
-                        setDisplayContent(pointsText);
-                        await ContinuousStudyService.speakAndWait(pointsText, settings, 800);
-                        
-                        if (!ContinuousStudyService.isRunning) break;
-                        
-                        // Question
-                        setPhase('question');
-                        setDisplayContent(cleanQuestion);
-                        await ContinuousStudyService.speakAndWait(cleanQuestion, settings, 1000);
-                        
-                        if (!ContinuousStudyService.isRunning) break;
-                        
-                        // Answer
-                        setPhase('answer');
-                        setDisplayContent(card.answer);
-                        await ContinuousStudyService.speakAndWait(card.answer, settings, 1500);
-                        
-                        if (!ContinuousStudyService.isRunning) break;
-                        
-                        // Pause between cards
-                        if (i < cardsToStudy.length - 1) {
-                            setPhase('transition');
-                            setDisplayContent('Next question...');
-                            await new Promise(resolve => setTimeout(resolve, 1200));
-                        }
-                    }
-                    
-                    // Complete
-                    if (ContinuousStudyService.isRunning) {
-                        setPhase('complete');
-                        setDisplayContent('Study session complete! Well done!');
-                        await ContinuousStudyService.speakAndWait('Study session complete! Well done!', settings, 1000);
-                        
-                        const duration = Math.floor((Date.now() - startTime) / 1000);
-                        const totalPoints = cardsToStudy.reduce((sum, card) => sum + (card.points || 1), 0);
-                        
-                        setTimeout(() => {
-                            onComplete({ 
-                                correct: cardsToStudy.length,
-                                incorrect: 0, 
-                                duration,
-                                totalPoints,
-                                mode: 'continuous'
-                            });
-                        }, 2000);
-                    }
-                    
-                } catch (error) {
-                    console.error('Continuous study error:', error);
-                    ContinuousStudyService.stop();
-                }
-            };
-            
-            const pauseStudy = () => {
-                setIsPaused(true);
-                ContinuousStudyService.pause();
-            };
-            
-            const resumeStudy = () => {
-                setIsPaused(false);
-                ContinuousStudyService.resume();
-                runContinuousStudy(studyOrder);
-            };
-            
-            const stopStudy = () => {
-                ContinuousStudyService.stop();
-                setIsPlaying(false);
-                setIsPaused(false);
-                setPhase('ready');
-                setCurrentIndex(0);
-                setDisplayContent('');
-                setStudyOrder([]);
-            };
-            
-            if (!settings.speechEnabled) {
-                return (
-                    <div className="text-center py-12">
-                        <Icon name="volume" className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                        <h3 className="text-lg font-semibold mb-2">Speech Required</h3>
-                        <p className="text-gray-500 mb-4">
-                            Please enable "Read Aloud" in the menu to use Continuous Study Mode.
-                        </p>
-                        <button
-                            onClick={onExit}
-                            className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
-                        >
-                            Back to Study Options
-                        </button>
-                    </div>
-                );
-            }
-            
-            return (
-                <div className="space-y-6 pb-6">
-                    <div className="text-center">
-                        <h2 className="text-2xl font-bold mb-2">🎵 Continuous Study Mode</h2>
-                        <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Auto-play: Points → Question → Answer with smooth transitions
-                        </p>
-                        {/* Status indicators */}
-                        <div className="flex items-center justify-center gap-3 mt-3">
-                            <div className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm ${
-                                settings.speechEnabled ? 'bg-green-500' : 'bg-red-500'
-                            } text-white text-xs font-medium`}>
-                                <span className="text-base">🔊</span>
-                                <span>Sound</span>
-                            </div>
-                            <div className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm ${
-                                settings.randomizeOrder ? 'bg-green-500' : 'bg-red-500'
-                            } text-white text-xs font-medium`}>
-                                <span className="text-base">🎲</span>
-                                <span>Random</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    {/* Progress with current card points */}
-                    <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="text-sm font-medium">
-                                {isPlaying ? `Question ${currentIndex + 1} of ${cards.length}` : 'Ready to Start'}
-                            </span>
-                            <div className="flex items-center gap-3">
-                                {currentCard && isPlaying && (
-                                    <span className={`text-sm px-2.5 py-1 rounded font-bold ${getPointsColor(currentCard.points || 1)}`}>
-                                        {currentCard.points || 1}
-                                    </span>
-                                )}
-                                <span className="text-sm text-gray-500">
-                                    {cards.reduce((sum, card) => sum + (card.points || 1), 0)}pt total
-                                </span>
-                            </div>
-                        </div>
-                        <div className={`h-3 rounded-full overflow-hidden ${
-                            theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
-                        }`}>
-                            <div
-                                className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500"
-                                style={{ width: `${progress}%` }}
-                            />
-                        </div>
-                    </div>
-                    
-                    {/* Display */}
-                    <div className={`p-6 rounded-xl ${
-                        theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                    } min-h-[250px] flex flex-col justify-center relative`}>
-                        {/* Current card points badge in corner */}
-                        {currentCard && isPlaying && (
-                            <div className="absolute top-4 right-4">
-                                <span className={`text-lg px-3 py-1.5 rounded-full font-bold ${getPointsColor(currentCard.points || 1)}`}>
-                                    {currentCard.points || 1}
-                                </span>
-                            </div>
-                        )}
-                        
-                        <div className="text-center mb-4">
-                            <div className="text-4xl mb-2">
-                                {phase === 'intro' ? '📢' : 
-                                 phase === 'question' ? '❓' : 
-                                 phase === 'answer' ? '💡' : 
-                                 phase === 'complete' ? '🎉' : '🎵'}
-                            </div>
-                            <h3 className="text-lg font-semibold mb-1">
-                                {phase === 'intro' ? 'Announcing Points' :
-                                 phase === 'question' ? 'Reading Question' :
-                                 phase === 'answer' ? 'Reading Answer' :
-                                 phase === 'complete' ? 'Session Complete!' : 'Ready to Start'}
-                            </h3>
-                        </div>
-                        
-                        {displayContent && isPlaying && (
-                            <div className={`p-4 rounded-lg ${
-                                theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'
-                            }`}>
-                                <div className={`${
-                                    phase === 'intro' ? 'text-center font-semibold text-lg' :
-                                    phase === 'answer' ? 'whitespace-pre-line' : ''
-                                }`}>
-                                    {displayContent}
-                                </div>
-                            </div>
-                        )}
-                        
-                        {!isPlaying && (
-                            <div className="text-center">
-                                <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                                    Questions and answers will appear here as they're read aloud
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                    
-                    {/* Controls */}
-                    <div className="space-y-3">
-                        {!isPlaying ? (
-                            <button
-                                onClick={startContinuousStudy}
-                                className="w-full py-4 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl hover:from-blue-600 hover:to-purple-600 font-medium text-lg flex items-center justify-center gap-2"
-                            >
-                                🎵 Start Auto-Play
-                            </button>
-                        ) : (
-                            <div className="grid grid-cols-2 gap-3">
-                                <button
-                                    onClick={isPaused ? resumeStudy : pauseStudy}
-                                    className={`py-3 rounded-xl border font-medium transition-all ${
-                                        theme === 'dark'
-                                            ? 'border-gray-700 hover:bg-gray-800'
-                                            : 'border-gray-300 hover:bg-gray-100'
-                                    }`}
-                                >
-                                    {isPaused ? '▶️ Resume' : '⏸️ Pause'}
-                                </button>
-                                <button
-                                    onClick={stopStudy}
-                                    className="py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 font-medium transition-all"
-                                >
-                                    ⏹️ Stop
-                                </button>
-                            </div>
-                        )}
-                        
-                        <button
-                            onClick={onExit}
-                            className={`w-full py-3 rounded-xl border font-medium transition-all ${
-                                theme === 'dark'
-                                    ? 'border-gray-700 hover:bg-gray-800'
-                                    : 'border-gray-300 hover:bg-gray-100'
-                            }`}
-                        >
-                            ← Back to Study Options
-                        </button>
-                    </div>
-                </div>
-            );
-        }
-
-        // Manual Study Mode - Fixed
-        function MobileStudyMode({ cards, onComplete }) {
-            const { state: { theme, settings } } = useFlashCards();
-            const [currentIndex, setCurrentIndex] = useState(0);
-            const [isFlipped, setIsFlipped] = useState(false);
-            const [startTime] = useState(Date.now());
-            const [showCompletePrompt, setShowCompletePrompt] = useState(false);
-            
-            const currentCard = cards[currentIndex];
-            const progress = ((currentIndex + 1) / cards.length) * 100;
-            const totalPoints = useMemo(() => {
-                return cards.reduce((sum, card) => sum + (card.points || 1), 0);
-            }, [cards]);
-            
-            // Cleanup on unmount
-            useEffect(() => {
-                return () => {
-                    SpeechService.stop();
-                };
-            }, []);
-            
-            const handleFlip = () => {
-                setIsFlipped(!isFlipped);
-            };
-            
-            const handleNavigate = (newIndex) => {
-                if (newIndex >= 0 && newIndex < cards.length) {
-                    SpeechService.stop(); // Stop any current speech
-                    setIsFlipped(false); // Reset to question side
-                    setCurrentIndex(newIndex); // This will trigger card change in MobileStudyCard
-                }
-            };
-            
-            const handleNext = () => {
-                if (currentIndex < cards.length - 1) {
-                    handleNavigate(currentIndex + 1);
-                } else {
-                    setShowCompletePrompt(true);
-                }
-            };
-            
-            const handleComplete = () => {
-                const duration = Math.floor((Date.now() - startTime) / 1000);
-                SpeechService.stop();
-                onComplete({ 
-                    correct: cards.length,
-                    incorrect: 0, 
-                    duration 
-                });
-            };
-            
-            if (!currentCard) {
-                return (
-                    <div className="flex items-center justify-center h-96">
-                        <div className="text-center">
-                            <Icon name="study" className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                            <p className="text-lg">No cards to study</p>
-                        </div>
-                    </div>
-                );
-            }
-            
-            return (
-                <div className="space-y-4 pb-6">
-                    <div className="p-4 rounded-xl">
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="text-sm font-medium">
-                                Question {currentIndex + 1} of {cards.length}
-                            </span>
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium">{totalPoints}pt total</span>
-                            </div>
-                        </div>
-                        <div className={`h-2 rounded-full overflow-hidden ${
-                            theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
-                        }`}>
-                            <div
-                                className="h-full bg-blue-500 transition-all duration-500"
-                                style={{ width: `${progress}%` }}
-                            />
-                        </div>
-                    </div>
-                    
-                    <div className="px-4">
-                        <MobileStudyCard
-                            card={currentCard}
-                            isFlipped={isFlipped}
-                            onFlip={handleFlip}
-                        />
-                    </div>
-                    
-                    <div className="px-4">
-                        <div className="grid grid-cols-2 gap-3">
-                            <button
-                                onClick={() => handleNavigate(currentIndex - 1)}
-                                disabled={currentIndex === 0}
-                                className={`py-3 rounded-xl border font-medium transition-all ${
-                                    currentIndex === 0
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : theme === 'dark'
-                                        ? 'border-gray-700 hover:bg-gray-800'
-                                        : 'border-gray-300 hover:bg-gray-100'
-                                }`}
-                            >
-                                ← Previous
-                            </button>
-                            <button
-                                onClick={handleNext}
-                                className="py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium transition-all"
-                            >
-                                {currentIndex === cards.length - 1 ? 'Complete' : 'Next →'}
-                            </button>
-                        </div>
-                    </div>
-                    
-                    {showCompletePrompt && (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                            <div className={`w-full max-w-sm rounded-2xl ${
-                                theme === 'dark' ? 'bg-gray-900' : 'bg-white'
-                            } p-6`}>
-                                <h3 className="text-xl font-semibold mb-4 text-center">Session Complete! 🎉</h3>
-                                <div className="space-y-3 mb-6">
-                                    <div className="flex justify-between">
-                                        <span>Cards reviewed:</span>
-                                        <span className="font-medium">{cards.length}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Total points:</span>
-                                        <span className="font-medium">{totalPoints}pt</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Time spent:</span>
-                                        <span className="font-medium">
-                                            {Math.floor((Date.now() - startTime) / 60000)}m {Math.floor(((Date.now() - startTime) % 60000) / 1000)}s
-                                        </span>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={handleComplete}
-                                    className="w-full py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
-                                >
-                                    Finish Session
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        // Card Editor - Fixed
+        // Mobile Card Editor Component
         function MobileCardEditor({ card, onSave, onCancel }) {
-            const { state: { theme } } = useFlashCards();
             const [question, setQuestion] = useState(card?.question || '');
             const [answer, setAnswer] = useState(card?.answer || '');
-            const [category, setCategory] = useState(card?.category || '');
             const [points, setPoints] = useState(card?.points || 1);
-            
-            const handleSubmit = () => {
-                if (!question.trim() || !answer.trim()) return;
-                
-                onSave({
-                    question: question.trim(),
-                    answer: answer.trim(),
-                    category: category.trim(),
-                    tags: [],
-                    points: points,
-                    media: [],
-                });
+            const { theme } = useFlashCards();
+
+            const handleSave = () => {
+                if (question.trim() && answer.trim()) {
+                    onSave({ question: question.trim(), answer: answer.trim(), points });
+                }
             };
-            
+
             return (
-                <div className="space-y-6">
+                <div className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium mb-2">Question</label>
                         <textarea
                             value={question}
                             onChange={(e) => setQuestion(e.target.value)}
-                            className={`w-full px-4 py-3 rounded-xl border ${
+                            className={`w-full px-4 py-3 rounded-xl resize-none ${
                                 theme === 'dark' 
-                                    ? 'bg-gray-800 border-gray-700 text-white' 
-                                    : 'bg-white border-gray-300'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 text-base`}
-                            rows={3}
+                                    ? 'bg-gray-800 text-white' 
+                                    : 'bg-gray-100 text-gray-900'
+                            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                            rows="3"
                             placeholder="Enter your question..."
-                            required
+                            autoFocus
                         />
                     </div>
-                    
                     <div>
                         <label className="block text-sm font-medium mb-2">Answer</label>
                         <textarea
                             value={answer}
                             onChange={(e) => setAnswer(e.target.value)}
-                            className={`w-full px-4 py-3 rounded-xl border ${
+                            className={`w-full px-4 py-3 rounded-xl resize-none ${
                                 theme === 'dark' 
-                                    ? 'bg-gray-800 border-gray-700 text-white' 
-                                    : 'bg-white border-gray-300'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 text-base`}
-                            rows={3}
+                                    ? 'bg-gray-800 text-white' 
+                                    : 'bg-gray-100 text-gray-900'
+                            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                            rows="3"
                             placeholder="Enter the answer..."
-                            required
                         />
                     </div>
-                    
                     <div>
-                        <label className="block text-sm font-medium mb-2">Category</label>
-                        <input
-                            value={category}
-                            onChange={(e) => setCategory(e.target.value)}
-                            className={`w-full px-4 py-3 rounded-xl border ${
+                        <label className="block text-sm font-medium mb-2">Points</label>
+                        <select
+                            value={points}
+                            onChange={(e) => setPoints(Number(e.target.value))}
+                            className={`w-full px-4 py-3 rounded-xl ${
                                 theme === 'dark' 
-                                    ? 'bg-gray-800 border-gray-700 text-white' 
-                                    : 'bg-white border-gray-300'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500 text-base`}
-                            placeholder="Optional category"
-                        />
-                    </div>
-                    
-                    <div>
-                        <label className="block text-sm font-medium mb-3">Points</label>
-                        <div className="grid grid-cols-6 gap-2">
-                            {[1, 2, 3, 4, 5, 6].map(pt => (
-                                <button
-                                    key={pt}
-                                    type="button"
-                                    onClick={() => setPoints(pt)}
-                                    className={`py-3 rounded-xl border transition-colors text-sm font-bold ${
-                                        points === pt
-                                            ? getPointsColor(pt) + ' border-transparent'
-                                            : theme === 'dark'
-                                            ? 'border-gray-700 hover:border-gray-600'
-                                            : 'border-gray-300 hover:border-gray-400'
-                                    }`}
-                                >
-                                    {pt}
-                                </button>
+                                    ? 'bg-gray-800 text-white' 
+                                    : 'bg-gray-100 text-gray-900'
+                            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                        >
+                            {[1, 2, 3, 4, 5].map(p => (
+                                <option key={p} value={p}>{p} point{p > 1 ? 's' : ''}</option>
                             ))}
-                        </div>
+                        </select>
                     </div>
-                    
                     <div className="flex gap-3 pt-4">
                         <button
-                            type="button"
-                            onClick={onCancel}
-                            className={`flex-1 py-3 rounded-xl border ${
-                                theme === 'dark' 
-                                    ? 'border-gray-700 hover:bg-gray-800' 
-                                    : 'border-gray-300 hover:bg-gray-100'
-                            } transition-colors font-medium`}
+                            onClick={handleSave}
+                            disabled={!question.trim() || !answer.trim()}
+                            className={`flex-1 px-6 py-3 rounded-xl font-semibold transition-colors ${
+                                question.trim() && answer.trim()
+                                    ? 'bg-blue-500 text-white hover:bg-blue-600'
+                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            }`}
                         >
-                            Cancel
+                            Save
                         </button>
                         <button
-                            type="button"
-                            onClick={handleSubmit}
-                            disabled={!question.trim() || !answer.trim()}
-                            className="flex-1 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                            onClick={onCancel}
+                            className={`flex-1 px-6 py-3 rounded-xl font-semibold transition-colors ${
+                                theme === 'dark'
+                                    ? 'bg-gray-800 text-white hover:bg-gray-700'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
                         >
-                            {card ? 'Update' : 'Create'}
+                            Cancel
                         </button>
                     </div>
                 </div>
             );
         }
 
-        // Provider Component - Updated with randomizeOrder setting
-        function FlashCardsProvider({ children }) {
-            const [state, setState] = useState(() => {
-                const saved = StorageService.load();
-                if (saved?.cards) {
-                    saved.cards = saved.cards.map(card => {
-                        if (!card.points) {
-                            const pointsMap = { easy: 1, medium: 3, hard: 5 };
-                            return { ...card, points: pointsMap[card.difficulty] || 1 };
-                        }
-                        return card;
-                    });
-                }
-                return {
-                    cards: saved?.cards || createDefaultCards(),
-                    categories: saved?.categories || new Set(['Crane Questions']),
-                    studySessions: saved?.studySessions || [],
-                    cardProgress: saved?.cardProgress || {},
-                    theme: saved?.theme || 'dark',
-                    settings: saved?.settings || {
-                        dailyGoal: 20,
-                        notificationsEnabled: false,
-                        soundEnabled: true,
-                        autoAdvance: true,
-                        studyReminders: [],
-                        speechEnabled: true,
-                        speechRate: 1.0,
-                        speechVoice: '',
-                        autoReadQuestion: true,
-                        autoReadAnswer: true,
-                        randomizeOrder: true,  // Added this setting
-                    },
-                };
-            });
-            
-            useEffect(() => {
-                StorageService.save(state);
-            }, [state]);
-            
-            useEffect(() => {
-                document.documentElement.classList.toggle('dark', state.theme === 'dark');
-            }, [state.theme]);
-            
-            const addCard = (card) => {
-                const newCard = {
-                    ...card,
-                    id: Date.now().toString(),
-                    created: new Date().toISOString(),
-                    lastStudied: null,
-                    nextReview: null,
-                    timesStudied: 0,
-                    timesCorrect: 0,
-                    easeFactor: 2.5,
-                    interval: 0,
-                    repetitions: 0,
-                    lapses: 0,
-                };
+        // Standard Study View Component
+        function StandardStudyView({ cards: studyCards, onComplete }) {
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [showAnswer, setShowAnswer] = useState(false);
+            const [results, setResults] = useState([]);
+            const [isFlipping, setIsFlipping] = useState(false);
+            const { recordStudyResult, theme } = useFlashCards();
+            const cardRef = useRef(null);
+
+            const currentCard = studyCards[currentIndex];
+            const progress = ((currentIndex + 1) / studyCards.length) * 100;
+
+            const handleAnswer = (correct) => {
+                recordStudyResult(currentCard.id, correct);
+                setResults([...results, { id: currentCard.id, correct }]);
                 
-                setState(prev => ({
-                    ...prev,
-                    cards: [...prev.cards, newCard],
-                    categories: new Set([...prev.categories, card.category].filter(Boolean)),
-                }));
-            };
-            
-            const updateCard = (id, updates) => {
-                setState(prev => ({
-                    ...prev,
-                    cards: prev.cards.map(card => 
-                        card.id === id ? { ...card, ...updates } : card
-                    ),
-                    categories: updates.category 
-                        ? new Set([...prev.categories, updates.category])
-                        : prev.categories,
-                }));
-            };
-            
-            const deleteCard = (id) => {
-                setState(prev => ({
-                    ...prev,
-                    cards: prev.cards.filter(card => card.id !== id),
-                }));
-            };
-            
-            const addStudySession = (session) => {
-                setState(prev => ({
-                    ...prev,
-                    studySessions: [
-                        ...prev.studySessions,
-                        { ...session, id: Date.now().toString() },
-                    ],
-                }));
-            };
-            
-            const toggleTheme = () => {
-                setState(prev => ({
-                    ...prev,
-                    theme: prev.theme === 'dark' ? 'light' : 'dark',
-                }));
-            };
-            
-            const importData = (importedData) => {
-                setState(prev => ({
-                    ...prev,
-                    cards: [...prev.cards, ...importedData.cards],
-                    categories: new Set([...prev.categories, ...importedData.categories]),
-                }));
-            };
-            
-            const clearAllCards = () => {
-                setState(prev => ({
-                    ...prev,
-                    cards: [],
-                    categories: new Set(['Crane Questions']),
-                    studySessions: [],
-                    cardProgress: {},
-                }));
-            };
-            
-            const toggleSpeech = () => {
-                setState(prev => ({
-                    ...prev,
-                    settings: {
-                        ...prev.settings,
-                        speechEnabled: !prev.settings.speechEnabled,
-                        autoReadQuestion: !prev.settings.speechEnabled,
-                        autoReadAnswer: !prev.settings.speechEnabled,
-                    }
-                }));
-                
-                if (state.settings.speechEnabled) {
-                    SpeechService.stop();
+                if (currentIndex < studyCards.length - 1) {
+                    setShowAnswer(false);
+                    setCurrentIndex(currentIndex + 1);
+                } else {
+                    const totalCorrect = results.filter(r => r.correct).length + (correct ? 1 : 0);
+                    const accuracy = ((totalCorrect / studyCards.length) * 100).toFixed(0);
+                    setTimeout(() => {
+                        onComplete({
+                            totalCards: studyCards.length,
+                            correct: totalCorrect,
+                            accuracy: accuracy
+                        });
+                    }, 300);
                 }
             };
-            
-            const toggleRandomize = () => {
-                setState(prev => ({
-                    ...prev,
-                    settings: {
-                        ...prev.settings,
-                        randomizeOrder: !prev.settings.randomizeOrder
-                    }
-                }));
+
+            const handleCardClick = () => {
+                if (!showAnswer) {
+                    setIsFlipping(true);
+                    setTimeout(() => {
+                        setShowAnswer(true);
+                        setIsFlipping(false);
+                    }, 150);
+                }
             };
-            
-            const value = {
-                state,
-                setState,
-                addCard,
-                updateCard,
-                deleteCard,
-                addStudySession,
-                toggleTheme,
-                importData,
-                clearAllCards,
-                toggleSpeech,
-                toggleRandomize,
+
+            const handleSpeak = () => {
+                const text = showAnswer ? currentCard.answer : currentCard.question;
+                SpeechService.speak(text);
             };
-            
-            return React.createElement(FlashCardsContext.Provider, { value }, children);
+
+            return (
+                <div className="flex flex-col h-full p-4 pb-20">
+                    {/* Progress bar */}
+                    <div className="mb-4">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm font-medium">
+                                Card {currentIndex + 1} of {studyCards.length}
+                            </span>
+                            <span className="text-sm text-gray-500">
+                                {progress.toFixed(0)}%
+                            </span>
+                        </div>
+                        <div className={`h-2 rounded-full overflow-hidden ${
+                            theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
+                        }`}>
+                            <div 
+                                className="h-full bg-blue-500 transition-all duration-300"
+                                style={{ width: `${progress}%` }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Card */}
+                    <div className="flex-1 flex items-center justify-center">
+                        <div 
+                            ref={cardRef}
+                            onClick={handleCardClick}
+                            className={`w-full max-w-md cursor-pointer transition-all duration-300 ${
+                                isFlipping ? 'scale-95 opacity-50' : 'scale-100 opacity-100'
+                            }`}
+                        >
+                            <div className={`p-8 rounded-2xl shadow-xl ${
+                                theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+                            } ${showAnswer ? 'border-2 border-blue-400' : ''}`}>
+                                <div className="flex justify-between items-start mb-4">
+                                    <span className={`text-sm px-3 py-1 rounded-full font-medium ${
+                                        showAnswer 
+                                            ? 'bg-blue-100 text-blue-700' 
+                                            : 'bg-gray-100 text-gray-700'
+                                    }`}>
+                                        {showAnswer ? 'Answer' : 'Question'}
+                                    </span>
+                                    <span className={`text-sm px-2 py-1 rounded ${
+                                        currentCard.points === 1 ? 'bg-green-100 text-green-700' :
+                                        currentCard.points === 2 ? 'bg-yellow-100 text-yellow-700' :
+                                        currentCard.points === 3 ? 'bg-orange-100 text-orange-700' :
+                                        currentCard.points === 4 ? 'bg-red-100 text-red-700' :
+                                        'bg-purple-100 text-purple-700'
+                                    } font-bold`}>
+                                        {currentCard.points} pt{currentCard.points > 1 ? 's' : ''}
+                                    </span>
+                                </div>
+                                
+                                <div className="text-center">
+                                    <p className="text-lg leading-relaxed">
+                                        {showAnswer ? currentCard.answer : currentCard.question}
+                                    </p>
+                                </div>
+
+                                {!showAnswer && (
+                                    <p className="text-center text-sm text-gray-500 mt-6">
+                                        Tap to reveal answer
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="mt-6 space-y-3">
+                        <button
+                            onClick={handleSpeak}
+                            className={`w-full px-6 py-3 rounded-xl font-medium transition-colors ${
+                                theme === 'dark'
+                                    ? 'bg-gray-800 text-white hover:bg-gray-700'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                        >
+                            <Icon name="volume" className="inline mr-2" />
+                            Speak {showAnswer ? 'Answer' : 'Question'}
+                        </button>
+
+                        {showAnswer && (
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => handleAnswer(false)}
+                                    className="flex-1 px-6 py-4 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition-colors"
+                                >
+                                    <Icon name="x" className="inline mr-2" />
+                                    Incorrect
+                                </button>
+                                <button
+                                    onClick={() => handleAnswer(true)}
+                                    className="flex-1 px-6 py-4 bg-green-500 text-white rounded-xl font-semibold hover:bg-green-600 transition-colors"
+                                >
+                                    <Icon name="check" className="inline mr-2" />
+                                    Correct
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
         }
 
-        // Main App Component - Updated with point filtering
-        function MobileFlashCardsApp() {
-            const { state, setState, toggleTheme, addCard, updateCard, deleteCard, addStudySession, importData, clearAllCards, toggleSpeech, toggleRandomize } = useFlashCards();
-            const { theme, cards, categories, settings } = state;
-            
-            const [activeView, setActiveView] = useState('cards');
-            const [searchQuery, setSearchQuery] = useState('');
-            const [selectedCategory, setSelectedCategory] = useState('');
-            const [selectedPoints, setSelectedPoints] = useState([]);
-            const [showCardEditor, setShowCardEditor] = useState(false);
-            const [editingCard, setEditingCard] = useState(undefined);
-            const [isStudying, setIsStudying] = useState(false);
-            const [showMenu, setShowMenu] = useState(false);
-            const [studyCards, setStudyCards] = useState([]);
-            const [studyMode, setStudyMode] = useState('manual');
-            const [studyPointFilter, setStudyPointFilter] = useState([]);  // Added this state
-            
-            const fileInputRef = React.useRef(null);
-            
-            const availablePoints = useMemo(() => {
-                const points = [...new Set(cards.map(card => card.points || 1))].sort((a, b) => a - b);
-                return points;
-            }, [cards]);
-            
+        // Permanent Study View Component - ONLY THIS COMPONENT IS MODIFIED
+        function PermanentStudyView({ cards: studyCards, onComplete }) {
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [isTransitioning, setIsTransitioning] = useState(false);
+            const [cycleCount, setCycleCount] = useState(0);
+            const { theme } = useFlashCards();
+            const currentCard = studyCards[currentIndex];
+
+            // Auto-read when card loads
             useEffect(() => {
-                if (activeView !== 'study' || !isStudying) {
-                    SpeechService.stop();
-                }
-            }, [activeView, isStudying]);
-            
-            const handleImport = () => {
-                fileInputRef.current?.click();
-                setShowMenu(false);
-            };
-            
-            const handleClearAll = () => {
-                if (confirm(`Are you sure you want to delete ALL ${cards.length} cards?`)) {
-                    SpeechService.stop();
-                    clearAllCards();
-                    setShowMenu(false);
-                    alert('All cards have been cleared.');
-                }
-            };
-            
-            const handleFileChange = (event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                
-                StorageService.importData(
-                    file,
-                    (data) => {
-                        importData(data);
-                        alert(`Successfully imported ${data.cards.length} cards!`);
-                    },
-                    (error) => {
-                        alert(`Import failed: ${error}`);
+                const fullText = `Question: ${currentCard.question}. Answer: ${currentCard.answer}`;
+                SpeechService.speak(fullText, () => {
+                    // After speech ends, wait 2 seconds then move to next card
+                    setTimeout(() => {
+                        moveToNext();
+                    }, 2000);
+                });
+            }, [currentIndex, cycleCount]);
+
+            const moveToNext = () => {
+                setIsTransitioning(true);
+                setTimeout(() => {
+                    if (currentIndex < studyCards.length - 1) {
+                        setCurrentIndex(currentIndex + 1);
+                    } else {
+                        setCurrentIndex(0);
+                        setCycleCount(prev => prev + 1);
                     }
-                );
-                
-                event.target.value = '';
+                    setIsTransitioning(false);
+                }, 300);
             };
-            
-            const filteredCards = useMemo(() => {
-                return cards.filter(card => {
-                    const matchesSearch = !searchQuery || 
-                        card.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        card.answer.toLowerCase().includes(searchQuery.toLowerCase());
-                    
-                    const matchesCategory = !selectedCategory || card.category === selectedCategory;
-                    const matchesPoints = selectedPoints.length === 0 || selectedPoints.includes(card.points || 1);
-                    
-                    return matchesSearch && matchesCategory && matchesPoints;
-                });
-            }, [cards, searchQuery, selectedCategory, selectedPoints]);
-            
-            const handleStudyComplete = (results) => {
-                addStudySession({
-                    date: new Date().toISOString(),
-                    duration: results.duration,
-                    cardsStudied: results.correct + results.incorrect,
-                    correctCount: results.correct,
-                    mode: results.mode || 'standard',
-                    totalPoints: results.totalPoints || 0,
-                });
-                
-                setIsStudying(false);
-                setStudyCards([]);
-                setStudyMode('manual');
-            };
-            
-            const startStudyingCard = (card) => {
+
+            const handleSkip = () => {
                 SpeechService.stop();
-                setStudyCards([card]);
-                setStudyMode('manual');
-                setIsStudying(true);
-                setActiveView('study');
+                moveToNext();
             };
-            
-            const totalPoints = useMemo(() => {
-                return cards.reduce((sum, card) => sum + (card.points || 1), 0);
-            }, [cards]);
-            
-            const handleViewChange = (newView) => {
-                SpeechService.stop();
-                ContinuousStudyService.stop();
-                setActiveView(newView);
-                setIsStudying(false);
-                setStudyMode('manual');
+
+            const getPointsColor = (points) => {
+                switch(points) {
+                    case 1: return 'bg-green-100 text-green-700';
+                    case 2: return 'bg-yellow-100 text-yellow-700';
+                    case 3: return 'bg-orange-100 text-orange-700';
+                    case 4: return 'bg-red-100 text-red-700';
+                    case 5: return 'bg-purple-100 text-purple-700';
+                    default: return 'bg-gray-100 text-gray-700';
+                }
             };
-            
+
             return (
-                <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
-                    <header className={`sticky top-0 z-40 ${
-                        theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-                    } border-b backdrop-blur-md bg-opacity-90`}>
-                        <div className="px-4 py-3">
-                            <div className="flex justify-between items-center">
-                                <h1 className="text-xl font-bold flex items-center gap-2">
-                                    <span className="bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
-                                        Flash Cards Pro
-                                    </span>
-                                    <span className={`text-sm px-2 py-0.5 rounded-full ${
-                                        theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
-                                    }`}>
-                                        v6.3
-                                    </span>
-                                </h1>
-                                
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={toggleTheme}
-                                        className={`p-2 rounded-lg ${
-                                            theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                        }`}
-                                    >
-                                        <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
-                                    </button>
-                                    
-                                    <button
-                                        onClick={() => setShowMenu(!showMenu)}
-                                        className={`p-2 rounded-lg ${
-                                            theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                        }`}
-                                    >
-                                        <Icon name="menu" />
-                                    </button>
-                                </div>
+                <div className="flex flex-col h-full p-4 pb-20">
+                    {/* Header with points in top right */}
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-xl font-bold">Permanent Study Mode</h2>
+                        <span className={`px-3 py-1 rounded-lg font-bold ${getPointsColor(currentCard.points || 1)}`}>
+                            {currentCard.points || 1} pt{(currentCard.points || 1) > 1 ? 's' : ''}
+                        </span>
+                    </div>
+
+                    {/* Card content */}
+                    <div className={`flex-1 flex flex-col justify-center transition-opacity duration-300 ${
+                        isTransitioning ? 'opacity-0' : 'opacity-100'
+                    }`}>
+                        <div className={`rounded-2xl shadow-xl p-8 space-y-6 ${
+                            theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+                        }`}>
+                            {/* Question */}
+                            <div>
+                                <h3 className="text-lg font-semibold mb-3 text-blue-500">Question</h3>
+                                <p className="text-lg leading-relaxed">{currentCard.question}</p>
                             </div>
-                            
-                            {activeView === 'cards' && !isStudying && (
-                                <div className="mt-3 space-y-3">
-                                    <div className="relative">
-                                        <Icon name="search" className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                        <input
-                                            type="text"
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            placeholder="Search cards..."
-                                            className={`w-full pl-10 pr-4 py-2 rounded-xl text-base ${
-                                                theme === 'dark'
-                                                    ? 'bg-gray-700 border-gray-600'
-                                                    : 'bg-gray-100 border-gray-300'
-                                            } border focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                                        />
-                                    </div>
-                                    
-                                    {availablePoints.length > 0 && (
-                                        <div className="flex gap-2 overflow-x-auto pb-1">
-                                            <button
-                                                onClick={() => setSelectedPoints([])}
-                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
-                                                    selectedPoints.length === 0
-                                                        ? 'bg-blue-500 text-white'
-                                                        : theme === 'dark'
-                                                        ? 'bg-gray-800 text-gray-300'
-                                                        : 'bg-gray-200 text-gray-700'
-                                                }`}
-                                            >
-                                                All Points
-                                            </button>
-                                            {availablePoints.map(pt => (
-                                                <button
-                                                    key={pt}
-                                                    onClick={() => {
-                                                        setSelectedPoints(prev =>
-                                                            prev.includes(pt)
-                                                                ? prev.filter(p => p !== pt)
-                                                                : [...prev, pt]
-                                                        );
-                                                    }}
-                                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
-                                                        selectedPoints.includes(pt)
-                                                            ? getPointsColor(pt)
-                                                            : theme === 'dark'
-                                                            ? 'bg-gray-800 text-gray-300'
-                                                            : 'bg-gray-200 text-gray-700'
-                                                    }`}
-                                                >
-                                                    {pt}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+
+                            {/* Answer */}
+                            <div>
+                                <h3 className="text-lg font-semibold mb-3 text-red-500">Answer</h3>
+                                <p className="text-lg leading-relaxed">{currentCard.answer}</p>
+                            </div>
                         </div>
-                    </header>
-                    
-                    {showMenu && (
-                        <div className="fixed inset-0 z-50" onClick={() => setShowMenu(false)}>
-                            <div className={`absolute top-16 right-4 w-52 rounded-xl shadow-lg ${
-                                theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-                            } border overflow-hidden`}>
-                                <button
-                                    onClick={() => {
-                                        setShowCardEditor(true);
-                                        setShowMenu(false);
-                                    }}
-                                    className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
-                                        theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                    }`}
-                                >
-                                    <Icon name="plus" className="w-4 h-4" />
-                                    New Card
-                                </button>
-                                <button
-                                    onClick={handleImport}
-                                    className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
-                                        theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                    }`}
-                                >
-                                    📥 Import Cards
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        StorageService.exportData(state);
-                                        setShowMenu(false);
-                                    }}
-                                    className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
-                                        theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                    }`}
-                                >
-                                    💾 Export Data
-                                </button>
-                                <div className={`border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                                    <button
-                                        onClick={() => {
-                                            toggleSpeech();
-                                            setShowMenu(false);
-                                        }}
-                                        className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
-                                            theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                        }`}
-                                    >
-                                        {settings.speechEnabled ? '🔊' : '🔇'} Read Aloud {settings.speechEnabled ? 'ON' : 'OFF'}
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            toggleRandomize();
-                                            setShowMenu(false);
-                                        }}
-                                        className={`w-full px-4 py-3 text-left flex items-center gap-3 ${
-                                            theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                        }`}
-                                    >
-                                        🎲 Randomize Order {settings.randomizeOrder ? 'ON' : 'OFF'}
-                                    </button>
+                    </div>
+
+                    {/* Progress indicator */}
+                    <div className="text-center my-4">
+                        <span className="text-sm text-gray-500">
+                            Card {currentIndex + 1} of {studyCards.length} • Cycle {cycleCount + 1}
+                        </span>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="space-y-3">
+                        <button
+                            onClick={handleSkip}
+                            className={`w-full px-6 py-3 rounded-xl font-medium transition-colors ${
+                                theme === 'dark'
+                                    ? 'bg-gray-800 text-white hover:bg-gray-700'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                        >
+                            Skip to Next
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                SpeechService.stop();
+                                onComplete();
+                            }}
+                            className={`w-full px-6 py-3 rounded-xl font-medium transition-colors ${
+                                theme === 'dark'
+                                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                    : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                            }`}
+                        >
+                            Exit Study Mode
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        // Quick Study View Component
+        function QuickStudyView({ cards: studyCards, onComplete }) {
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [showAnswer, setShowAnswer] = useState(false);
+            const [timeLeft, setTimeLeft] = useState(30);
+            const [score, setScore] = useState(0);
+            const [isFlipping, setIsFlipping] = useState(false);
+            const { theme } = useFlashCards();
+            const intervalRef = useRef(null);
+
+            const currentCard = studyCards[currentIndex];
+
+            useEffect(() => {
+                intervalRef.current = setInterval(() => {
+                    setTimeLeft(prev => {
+                        if (prev <= 1) {
+                            handleTimeUp();
+                            return 30;
+                        }
+                        return prev - 1;
+                    });
+                }, 1000);
+
+                return () => clearInterval(intervalRef.current);
+            }, [currentIndex]);
+
+            const handleTimeUp = () => {
+                if (currentIndex < studyCards.length - 1) {
+                    setCurrentIndex(currentIndex + 1);
+                    setShowAnswer(false);
+                    setTimeLeft(30);
+                } else {
+                    onComplete({ score, totalCards: studyCards.length });
+                }
+            };
+
+            const handleAnswer = (correct) => {
+                if (correct) {
+                    setScore(score + (currentCard.points || 1));
+                }
+
+                if (currentIndex < studyCards.length - 1) {
+                    setCurrentIndex(currentIndex + 1);
+                    setShowAnswer(false);
+                    setTimeLeft(30);
+                } else {
+                    onComplete({ 
+                        score: score + (correct ? (currentCard.points || 1) : 0), 
+                        totalCards: studyCards.length 
+                    });
+                }
+            };
+
+            const handleCardClick = () => {
+                if (!showAnswer) {
+                    setIsFlipping(true);
+                    setTimeout(() => {
+                        setShowAnswer(true);
+                        setIsFlipping(false);
+                    }, 150);
+                }
+            };
+
+            return (
+                <div className="flex flex-col h-full p-4 pb-20">
+                    {/* Header with timer and score */}
+                    <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center gap-3">
+                            <div className={`px-3 py-1 rounded-lg ${
+                                timeLeft <= 10 
+                                    ? 'bg-red-100 text-red-700' 
+                                    : 'bg-blue-100 text-blue-700'
+                            } font-bold`}>
+                                <Icon name="clock" className="inline mr-1" />
+                                {timeLeft}s
+                            </div>
+                            <div className="text-sm text-gray-500">
+                                Card {currentIndex + 1}/{studyCards.length}
+                            </div>
+                        </div>
+                        <div className="bg-green-100 text-green-700 px-3 py-1 rounded-lg font-bold">
+                            <Icon name="points" className="inline mr-1" />
+                            {score} pts
+                        </div>
+                    </div>
+
+                    {/* Card */}
+                    <div className="flex-1 flex items-center justify-center">
+                        <div 
+                            onClick={handleCardClick}
+                            className={`w-full max-w-md cursor-pointer transition-all duration-300 ${
+                                isFlipping ? 'scale-95 opacity-50' : 'scale-100 opacity-100'
+                            }`}
+                        >
+                            <div className={`p-8 rounded-2xl shadow-xl ${
+                                theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+                            } ${showAnswer ? 'border-2 border-blue-400' : ''}`}>
+                                <div className="flex justify-between items-start mb-4">
+                                    <span className={`text-sm px-3 py-1 rounded-full font-medium ${
+                                        showAnswer 
+                                            ? 'bg-blue-100 text-blue-700' 
+                                            : 'bg-gray-100 text-gray-700'
+                                    }`}>
+                                        {showAnswer ? 'Answer' : 'Question'}
+                                    </span>
+                                    <span className={`text-sm px-2 py-1 rounded ${
+                                        currentCard.points === 1 ? 'bg-green-100 text-green-700' :
+                                        currentCard.points === 2 ? 'bg-yellow-100 text-yellow-700' :
+                                        currentCard.points === 3 ? 'bg-orange-100 text-orange-700' :
+                                        currentCard.points === 4 ? 'bg-red-100 text-red-700' :
+                                        'bg-purple-100 text-purple-700'
+                                    } font-bold`}>
+                                        {currentCard.points || 1} pt{(currentCard.points || 1) > 1 ? 's' : ''}
+                                    </span>
                                 </div>
-                                <div className={`border-t ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                                    <button
-                                        onClick={handleClearAll}
-                                        className={`w-full px-4 py-3 text-left flex items-center gap-3 text-red-500 ${
-                                            theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                                        }`}
-                                    >
-                                        🗑️ Clear All Cards
-                                    </button>
+                                
+                                <div className="text-center">
+                                    <p className="text-lg leading-relaxed">
+                                        {showAnswer ? currentCard.answer : currentCard.question}
+                                    </p>
                                 </div>
+
+                                {!showAnswer && (
+                                    <p className="text-center text-sm text-gray-500 mt-6">
+                                        Tap to reveal answer
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Quick answer buttons */}
+                    {showAnswer && (
+                        <div className="flex gap-3 mt-6">
+                            <button
+                                onClick={() => handleAnswer(false)}
+                                className="flex-1 px-6 py-4 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition-colors"
+                            >
+                                <Icon name="x" className="inline mr-2" />
+                                Skip
+                            </button>
+                            <button
+                                onClick={() => handleAnswer(true)}
+                                className="flex-1 px-6 py-4 bg-green-500 text-white rounded-xl font-semibold hover:bg-green-600 transition-colors"
+                            >
+                                <Icon name="check" className="inline mr-2" />
+                                Got it!
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Spaced Repetition View Component
+        function SpacedRepetitionView({ cards: allCards, onComplete }) {
+            const [currentCard, setCurrentCard] = useState(null);
+            const [showAnswer, setShowAnswer] = useState(false);
+            const [studyQueue, setStudyQueue] = useState([]);
+            const [sessionStats, setSessionStats] = useState({ reviewed: 0, correct: 0 });
+            const { recordStudyResult, getCardStats, theme } = useFlashCards();
+
+            useEffect(() => {
+                // Create study queue based on spaced repetition algorithm
+                const now = new Date();
+                const queue = allCards
+                    .map(card => {
+                        const stats = getCardStats(card.id);
+                        const daysSinceReview = stats.lastReview 
+                            ? (now - new Date(stats.lastReview)) / (1000 * 60 * 60 * 24)
+                            : Infinity;
+                        
+                        // Calculate priority based on accuracy and time since last review
+                        const accuracy = stats.accuracy / 100;
+                        const reviewInterval = Math.pow(2, Math.floor(accuracy * 5));
+                        const priority = daysSinceReview / reviewInterval;
+                        
+                        return { ...card, priority, stats };
+                    })
+                    .filter(card => {
+                        // Include cards that need review
+                        const daysSinceReview = card.stats.lastReview 
+                            ? (now - new Date(card.stats.lastReview)) / (1000 * 60 * 60 * 24)
+                            : Infinity;
+                        const accuracy = card.stats.accuracy / 100;
+                        const reviewInterval = Math.pow(2, Math.floor(accuracy * 5));
+                        
+                        return daysSinceReview >= reviewInterval * 0.8; // 80% of interval
+                    })
+                    .sort((a, b) => b.priority - a.priority)
+                    .slice(0, 20); // Limit session to 20 cards
+                
+                setStudyQueue(queue);
+                if (queue.length > 0) {
+                    setCurrentCard(queue[0]);
+                }
+            }, []);
+
+            const handleAnswer = (difficulty) => {
+                const correct = difficulty !== 'again';
+                recordStudyResult(currentCard.id, correct);
+                
+                setSessionStats(prev => ({
+                    reviewed: prev.reviewed + 1,
+                    correct: prev.correct + (correct ? 1 : 0)
+                }));
+
+                const remainingQueue = studyQueue.slice(1);
+                
+                if (difficulty === 'again') {
+                    // Re-add to end of queue
+                    remainingQueue.push(currentCard);
+                }
+                
+                if (remainingQueue.length > 0) {
+                    setStudyQueue(remainingQueue);
+                    setCurrentCard(remainingQueue[0]);
+                    setShowAnswer(false);
+                } else {
+                    onComplete({
+                        reviewed: sessionStats.reviewed + 1,
+                        correct: sessionStats.correct + (correct ? 1 : 0)
+                    });
+                }
+            };
+
+            if (!currentCard) {
+                return (
+                    <div className="flex flex-col items-center justify-center h-full p-4">
+                        <Icon name="sparkles" className="w-16 h-16 mb-4 text-green-500" />
+                        <h2 className="text-2xl font-bold mb-2">All caught up!</h2>
+                        <p className="text-gray-500 text-center mb-6">
+                            No cards need review right now. Great job staying on top of your studies!
+                        </p>
+                        <button
+                            onClick={() => onComplete({ reviewed: 0, correct: 0 })}
+                            className="px-6 py-3 bg-blue-500 text-white rounded-xl font-semibold"
+                        >
+                            Back to Study Menu
+                        </button>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="flex flex-col h-full p-4 pb-20">
+                    {/* Header */}
+                    <div className="mb-4">
+                        <div className="flex justify-between items-center mb-2">
+                            <h2 className="text-lg font-semibold">Spaced Repetition</h2>
+                            <span className="text-sm text-gray-500">
+                                {studyQueue.length} cards left
+                            </span>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                            Last reviewed: {currentCard.stats.lastReview 
+                                ? new Date(currentCard.stats.lastReview).toLocaleDateString()
+                                : 'Never'
+                            } • Accuracy: {currentCard.stats.accuracy.toFixed(0)}%
+                        </div>
+                    </div>
+
+                    {/* Card */}
+                    <div className="flex-1 flex items-center justify-center">
+                        <div 
+                            onClick={() => !showAnswer && setShowAnswer(true)}
+                            className={`w-full max-w-md ${!showAnswer ? 'cursor-pointer' : ''}`}
+                        >
+                            <div className={`p-8 rounded-2xl shadow-xl ${
+                                theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+                            }`}>
+                                <div className="flex justify-between items-start mb-4">
+                                    <span className={`text-sm px-3 py-1 rounded-full font-medium ${
+                                        showAnswer 
+                                            ? 'bg-blue-100 text-blue-700' 
+                                            : 'bg-gray-100 text-gray-700'
+                                    }`}>
+                                        {showAnswer ? 'Answer' : 'Question'}
+                                    </span>
+                                    <span className={`text-sm px-2 py-1 rounded ${
+                                        currentCard.points === 1 ? 'bg-green-100 text-green-700' :
+                                        currentCard.points === 2 ? 'bg-yellow-100 text-yellow-700' :
+                                        currentCard.points === 3 ? 'bg-orange-100 text-orange-700' :
+                                        currentCard.points === 4 ? 'bg-red-100 text-red-700' :
+                                        'bg-purple-100 text-purple-700'
+                                    } font-bold`}>
+                                        {currentCard.points || 1} pt{(currentCard.points || 1) > 1 ? 's' : ''}
+                                    </span>
+                                </div>
+                                
+                                <div className="text-center">
+                                    <p className="text-lg leading-relaxed">
+                                        {showAnswer ? currentCard.answer : currentCard.question}
+                                    </p>
+                                </div>
+
+                                {!showAnswer && (
+                                    <p className="text-center text-sm text-gray-500 mt-6">
+                                        Tap to reveal answer
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Spaced repetition buttons */}
+                    {showAnswer && (
+                        <div className="mt-6">
+                            <p className="text-sm text-gray-500 text-center mb-3">
+                                How well did you remember?
+                            </p>
+                            <div className="grid grid-cols-4 gap-2">
+                                <button
+                                    onClick={() => handleAnswer('again')}
+                                    className="px-3 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors text-sm"
+                                >
+                                    Again
+                                </button>
+                                <button
+                                    onClick={() => handleAnswer('hard')}
+                                    className="px-3 py-3 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 transition-colors text-sm"
+                                >
+                                    Hard
+                                </button>
+                                <button
+                                    onClick={() => handleAnswer('good')}
+                                    className="px-3 py-3 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors text-sm"
+                                >
+                                    Good
+                                </button>
+                                <button
+                                    onClick={() => handleAnswer('easy')}
+                                    className="px-3 py-3 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600 transition-colors text-sm"
+                                >
+                                    Easy
+                                </button>
                             </div>
                         </div>
                     )}
+                </div>
+            );
+        }
+
+        // Main Mobile App Component
+        function MobileFlashCardsApp() {
+            const { 
+                cards, 
+                addCard, 
+                updateCard, 
+                deleteCard,
+                getCardStats,
+                theme,
+                toggleTheme 
+            } = useFlashCards();
+
+            const [activeView, setActiveView] = useState('cards');
+            const [searchTerm, setSearchTerm] = useState('');
+            const [showCardEditor, setShowCardEditor] = useState(false);
+            const [editingCard, setEditingCard] = useState(undefined);
+            const [isStudying, setIsStudying] = useState(false);
+            const [studyMode, setStudyMode] = useState('standard');
+            const [studyCards, setStudyCards] = useState([]);
+            const [selectedPoints, setSelectedPoints] = useState('all');
+
+            const handleStartStudy = (mode, pointFilter = 'all') => {
+                let cardsToStudy = [...cards];
+                
+                // Apply point filter if not 'all'
+                if (pointFilter !== 'all') {
+                    cardsToStudy = cardsToStudy.filter(card => 
+                        (card.points || 1) === parseInt(pointFilter)
+                    );
+                }
+
+                if (cardsToStudy.length === 0) {
+                    alert('No cards available for study!');
+                    return;
+                }
+
+                // Don't shuffle for spaced repetition
+                if (mode !== 'spaced') {
+                    cardsToStudy = shuffleArray(cardsToStudy);
+                }
+                
+                setStudyCards(cardsToStudy);
+                setStudyMode(mode);
+                setIsStudying(true);
+            };
+
+            const handleStudyComplete = (results) => {
+                setIsStudying(false);
+                setStudyCards([]);
+                
+                if (results && (results.totalCards || results.reviewed)) {
+                    const message = studyMode === 'spaced' 
+                        ? `Session Complete!\n\nReviewed: ${results.reviewed} cards\nCorrect: ${results.correct}`
+                        : studyMode === 'quick'
+                        ? `Time's Up!\n\nScore: ${results.score} points\nCards: ${results.totalCards}`
+                        : `Study Complete!\n\nAccuracy: ${results.accuracy}%\nCorrect: ${results.correct}/${results.totalCards}`;
                     
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".txt,.json"
-                        onChange={handleFileChange}
-                        style={{ display: 'none' }}
-                    />
+                    alert(message);
+                }
+            };
+
+            const handleViewChange = (view) => {
+                if (isStudying && view !== 'study') {
+                    if (confirm('Are you sure you want to exit study mode?')) {
+                        setIsStudying(false);
+                        setStudyCards([]);
+                        setActiveView(view);
+                    }
+                } else {
+                    setActiveView(view);
+                }
+            };
+
+            const filteredCards = cards.filter(card => 
+                card.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                card.answer.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+
+            const getPointsColor = (points) => {
+                switch(points) {
+                    case 1: return 'bg-green-100 text-green-700';
+                    case 2: return 'bg-yellow-100 text-yellow-700';
+                    case 3: return 'bg-orange-100 text-orange-700';
+                    case 4: return 'bg-red-100 text-red-700';
+                    case 5: return 'bg-purple-100 text-purple-700';
+                    default: return 'bg-gray-100 text-gray-700';
+                }
+            };
+
+            const availablePoints = [...new Set(cards.map(c => c.points || 1))].sort((a, b) => a - b);
+
+            return (
+                <div className={`min-h-screen flex flex-col ${
+                    theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'
+                }`}>
+                    <header className={`sticky top-0 z-50 ${
+                        theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                    } border-b`}>
+                        <div className="px-4 py-4 flex items-center justify-between">
+                            <h1 className="text-xl font-bold">Flash Cards Pro v6.4</h1>
+                            <button
+                                onClick={toggleTheme}
+                                className={`p-2 rounded-lg transition-colors ${
+                                    theme === 'dark' 
+                                        ? 'bg-gray-700 hover:bg-gray-600' 
+                                        : 'bg-gray-100 hover:bg-gray-200'
+                                }`}
+                            >
+                                <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+                            </button>
+                        </div>
+                    </header>
                     
-                    <main className="px-4 py-4 pb-20">
-                        {activeView === 'cards' && !isStudying && (
-                            <div className="space-y-4">
-                                {categories.size > 0 && (
-                                    <div className="flex gap-2 overflow-x-auto pb-2">
-                                        <button
-                                            onClick={() => setSelectedCategory('')}
-                                            className={`px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${
-                                                !selectedCategory
-                                                    ? 'bg-blue-500 text-white'
-                                                    : theme === 'dark'
-                                                    ? 'bg-gray-800 text-gray-300'
-                                                    : 'bg-gray-200 text-gray-700'
-                                            }`}
-                                        >
-                                            All
-                                        </button>
-                                        {Array.from(categories).map(cat => (
-                                            <button
-                                                key={cat}
-                                                onClick={() => setSelectedCategory(cat)}
-                                                className={`px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${
-                                                    selectedCategory === cat
-                                                        ? 'bg-blue-500 text-white'
-                                                        : theme === 'dark'
-                                                        ? 'bg-gray-800 text-gray-300'
-                                                        : 'bg-gray-200 text-gray-700'
-                                                }`}
-                                            >
-                                                {cat}
-                                            </button>
-                                        ))}
+                    <main className="flex-1 pb-20 overflow-y-auto">
+                        {isStudying ? (
+                            studyMode === 'standard' ? (
+                                <StandardStudyView 
+                                    cards={studyCards} 
+                                    onComplete={handleStudyComplete}
+                                />
+                            ) : studyMode === 'permanent' ? (
+                                <PermanentStudyView 
+                                    cards={studyCards} 
+                                    onComplete={handleStudyComplete}
+                                />
+                            ) : studyMode === 'quick' ? (
+                                <QuickStudyView 
+                                    cards={studyCards} 
+                                    onComplete={handleStudyComplete}
+                                />
+                            ) : (
+                                <SpacedRepetitionView 
+                                    cards={studyCards} 
+                                    onComplete={handleStudyComplete}
+                                />
+                            )
+                        ) : activeView === 'cards' ? (
+                            <div className="p-4">
+                                <div className="mb-4 space-y-3">
+                                    <div className={`flex items-center px-4 py-3 rounded-xl ${
+                                        theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+                                    }`}>
+                                        <Icon name="search" className="mr-3 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            placeholder="Search cards..."
+                                            className="flex-1 bg-transparent outline-none"
+                                        />
                                     </div>
-                                )}
+                                    <button
+                                        onClick={() => setShowCardEditor(true)}
+                                        className="w-full px-6 py-3 bg-blue-500 text-white rounded-xl font-semibold hover:bg-blue-600 transition-colors"
+                                    >
+                                        <Icon name="plus" className="inline mr-2" />
+                                        Add New Card
+                                    </button>
+                                </div>
                                 
                                 {filteredCards.length === 0 ? (
                                     <div className="text-center py-12">
-                                        <Icon name="study" className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                                        <p className="text-lg mb-2">No cards found</p>
-                                        <p className="text-gray-500 mb-4">Create your first card to get started!</p>
-                                        <button
-                                            onClick={() => setShowCardEditor(true)}
-                                            className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium"
-                                        >
-                                            Create Card
-                                        </button>
+                                        <p className="text-gray-500 mb-4">
+                                            {searchTerm ? 'No cards found' : 'No cards yet'}
+                                        </p>
+                                        {!searchTerm && (
+                                            <p className="text-sm text-gray-400">
+                                                Tap the button above to create your first card
+                                            </p>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
-                                        {filteredCards.map(card => (
-                                            <MobileCardItem
-                                                key={card.id}
-                                                card={card}
-                                                onEdit={() => {
-                                                    setEditingCard(card);
-                                                    setShowCardEditor(true);
-                                                }}
-                                                onDelete={() => {
-                                                    if (confirm('Delete this card?')) {
-                                                        deleteCard(card.id);
-                                                    }
-                                                }}
-                                                onStudy={() => startStudyingCard(card)}
-                                            />
-                                        ))}
+                                        {filteredCards.map(card => {
+                                            const stats = getCardStats(card.id);
+                                            return (
+                                                <div
+                                                    key={card.id}
+                                                    className={`p-4 rounded-xl transition-all ${
+                                                        theme === 'dark' 
+                                                            ? 'bg-gray-800 hover:bg-gray-700' 
+                                                            : 'bg-white hover:bg-gray-50'
+                                                    } shadow-sm`}
+                                                >
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <h3 className="font-medium line-clamp-2 flex-1 mr-2">
+                                                            {card.question}
+                                                        </h3>
+                                                        <span className={`text-xs px-2 py-1 rounded font-bold ${
+                                                            getPointsColor(card.points || 1)
+                                                        }`}>
+                                                            {card.points || 1}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-sm text-gray-500 line-clamp-2 mb-3">
+                                                        {card.answer}
+                                                    </p>
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="text-xs text-gray-400">
+                                                            {stats.attempts > 0 && (
+                                                                <span className="mr-3">
+                                                                    {stats.accuracy.toFixed(0)}% accuracy
+                                                                </span>
+                                                            )}
+                                                            <span>{stats.attempts} reviews</span>
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingCard(card);
+                                                                    setShowCardEditor(true);
+                                                                }}
+                                                                className={`p-2 rounded-lg transition-colors ${
+                                                                    theme === 'dark'
+                                                                        ? 'hover:bg-gray-600'
+                                                                        : 'hover:bg-gray-200'
+                                                                }`}
+                                                            >
+                                                                <Icon name="edit" className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (confirm('Delete this card?')) {
+                                                                        deleteCard(card.id);
+                                                                    }
+                                                                }}
+                                                                className={`p-2 rounded-lg transition-colors ${
+                                                                    theme === 'dark'
+                                                                        ? 'hover:bg-gray-600'
+                                                                        : 'hover:bg-gray-200'
+                                                                }`}
+                                                            >
+                                                                <Icon name="delete" className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
-                        )}
-                        
-                        {activeView === 'study' && !isStudying && (
-                            <div className="space-y-6">
-                                <h2 className="text-2xl font-bold text-center mb-6">Ready to Study? 📚</h2>
-                                
-                                {/* Point Filter Selection */}
-                                <div className={`p-4 rounded-xl ${
-                                    theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                                }`}>
-                                    <h3 className="text-sm font-semibold mb-3">Filter by Points (Optional)</h3>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        <button
-                                            onClick={() => setStudyPointFilter([])}
-                                            className={`py-2 px-3 rounded-lg text-sm font-medium ${
-                                                studyPointFilter.length === 0
-                                                    ? 'bg-blue-500 text-white'
-                                                    : theme === 'dark'
-                                                    ? 'bg-gray-700 text-gray-300'
-                                                    : 'bg-gray-200 text-gray-700'
-                                            }`}
-                                        >
-                                            All Points
-                                        </button>
-                                        {[1, 2, 3, 4, 5, 6].map(pt => {
-                                            const count = cards.filter(c => (c.points || 1) === pt).length;
-                                            if (count === 0) return null;
-                                            return (
-                                                <button
-                                                    key={pt}
-                                                    onClick={() => {
-                                                        setStudyPointFilter(prev =>
-                                                            prev.includes(pt)
-                                                                ? prev.filter(p => p !== pt)
-                                                                : [...prev, pt]
-                                                        );
-                                                    }}
-                                                    className={`py-2 px-3 rounded-lg text-sm font-medium flex items-center justify-center gap-1 ${
-                                                        studyPointFilter.includes(pt)
-                                                            ? getPointsColor(pt)
-                                                            : theme === 'dark'
-                                                            ? 'bg-gray-700 text-gray-300'
-                                                            : 'bg-gray-200 text-gray-700'
-                                                    }`}
-                                                >
-                                                    {pt}
-                                                    <span className="text-xs ml-1">({count})</span>
-                                                </button>
-                                            );
-                                        }).filter(Boolean)}
-                                    </div>
-                                    {studyPointFilter.length > 0 && (
-                                        <p className="text-xs text-gray-500 mt-2">
-                                            {cards.filter(c => studyPointFilter.includes(c.points || 1)).length} cards selected
-                                        </p>
-                                    )}
+                        ) : activeView === 'study' ? (
+                            <div className="p-4 space-y-6">
+                                <div>
+                                    <h2 className="text-2xl font-bold mb-2">Study Mode</h2>
+                                    <p className="text-gray-500">Choose how you want to study</p>
                                 </div>
                                 
-                                <div className={`p-6 rounded-xl ${
-                                    theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                                } text-center`}>
-                                    <h3 className="text-lg font-semibold mb-2">Study Session</h3>
-                                    <p className={`text-sm mb-4 ${
-                                        theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                                {/* Point filter */}
+                                {cards.length > 0 && availablePoints.length > 1 && (
+                                    <div className={`p-4 rounded-xl ${
+                                        theme === 'dark' ? 'bg-gray-800' : 'bg-white'
                                     }`}>
-                                        Choose how you want to study your {cards.length} flashcards
-                                    </p>
-                                    
-                                    <div className="space-y-3">
-                                        <button
-                                            onClick={() => {
-                                                setStudyMode('continuous');
-                                                // Apply point filter if selected
-                                                const cardsToStudy = studyPointFilter.length > 0
-                                                    ? filteredCards.filter(c => studyPointFilter.includes(c.points || 1))
-                                                    : filteredCards;
-                                                setStudyCards(cardsToStudy);
-                                                setIsStudying(true);
-                                            }}
-                                            disabled={
-                                                filteredCards.length === 0 || 
-                                                (studyPointFilter.length > 0 && 
-                                                 filteredCards.filter(c => studyPointFilter.includes(c.points || 1)).length === 0)
-                                            }
-                                            className="w-full py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium relative overflow-hidden group"
+                                        <label className="block text-sm font-medium mb-2">
+                                            Filter by Points
+                                        </label>
+                                        <select
+                                            value={selectedPoints}
+                                            onChange={(e) => setSelectedPoints(e.target.value)}
+                                            className={`w-full px-4 py-3 rounded-xl ${
+                                                theme === 'dark' 
+                                                    ? 'bg-gray-700 text-white' 
+                                                    : 'bg-gray-100 text-gray-900'
+                                            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                                         >
-                                            <div className="absolute inset-0 bg-white opacity-10 transform translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
-                                            <div className="relative flex items-center justify-center gap-2">
-                                                🎵 Continuous Auto-Play
-                                            </div>
-                                            <div className="text-xs opacity-75 mt-1">Listen hands-free as questions & answers are read automatically</div>
-                                        </button>
-                                        
-                                        <button
-                                            onClick={() => {
-                                                SpeechService.stop();
-                                                setStudyMode('manual');
-                                                // Apply point filter if selected
-                                                const cardsToStudy = studyPointFilter.length > 0
-                                                    ? filteredCards.filter(c => studyPointFilter.includes(c.points || 1))
-                                                    : filteredCards;
-                                                setStudyCards(cardsToStudy);
-                                                setIsStudying(true);
-                                            }}
-                                            disabled={
-                                                filteredCards.length === 0 || 
-                                                (studyPointFilter.length > 0 && 
-                                                 filteredCards.filter(c => studyPointFilter.includes(c.points || 1)).length === 0)
-                                            }
-                                            className="w-full py-4 bg-green-500 text-white rounded-xl hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
-                                        >
-                                            Manual Study All ({
-                                                studyPointFilter.length > 0 
-                                                    ? filteredCards.filter(c => studyPointFilter.includes(c.points || 1)).length 
-                                                    : filteredCards.length
-                                            } cards)
-                                        </button>
+                                            <option value="all">All Points</option>
+                                            {availablePoints.map(pt => (
+                                                <option key={pt} value={pt}>
+                                                    {pt} Point{pt > 1 ? 's' : ''} Only
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
+                                )}
+
+                                {/* Study modes */}
+                                <div className="space-y-4">
+                                    <button
+                                        onClick={() => handleStartStudy('standard', selectedPoints)}
+                                        disabled={cards.length === 0}
+                                        className={`w-full p-6 rounded-xl text-left transition-all ${
+                                            cards.length === 0
+                                                ? 'opacity-50 cursor-not-allowed'
+                                                : 'hover:scale-[1.02] cursor-pointer'
+                                        } ${
+                                            theme === 'dark' 
+                                                ? 'bg-gradient-to-r from-blue-600 to-blue-700' 
+                                                : 'bg-gradient-to-r from-blue-500 to-blue-600'
+                                        } text-white`}
+                                    >
+                                        <h3 className="text-xl font-bold mb-2">
+                                            <Icon name="cards" className="inline mr-2" />
+                                            Standard Mode
+                                        </h3>
+                                        <p className="text-sm opacity-90">
+                                            Test yourself with flashcards and track your progress
+                                        </p>
+                                    </button>
+                                    
+                                    <button
+                                        onClick={() => handleStartStudy('permanent', selectedPoints)}
+                                        disabled={cards.length === 0}
+                                        className={`w-full p-6 rounded-xl text-left transition-all ${
+                                            cards.length === 0
+                                                ? 'opacity-50 cursor-not-allowed'
+                                                : 'hover:scale-[1.02] cursor-pointer'
+                                        } ${
+                                            theme === 'dark' 
+                                                ? 'bg-gradient-to-r from-purple-600 to-purple-700' 
+                                                : 'bg-gradient-to-r from-purple-500 to-purple-600'
+                                        } text-white`}
+                                    >
+                                        <h3 className="text-xl font-bold mb-2">
+                                            <Icon name="brain" className="inline mr-2" />
+                                            Permanent Study
+                                        </h3>
+                                        <p className="text-sm opacity-90">
+                                            Continuous review mode for long-term retention
+                                        </p>
+                                    </button>
+
+                                    <button
+                                        onClick={() => handleStartStudy('quick', selectedPoints)}
+                                        disabled={cards.length === 0}
+                                        className={`w-full p-6 rounded-xl text-left transition-all ${
+                                            cards.length === 0
+                                                ? 'opacity-50 cursor-not-allowed'
+                                                : 'hover:scale-[1.02] cursor-pointer'
+                                        } ${
+                                            theme === 'dark' 
+                                                ? 'bg-gradient-to-r from-orange-600 to-orange-700' 
+                                                : 'bg-gradient-to-r from-orange-500 to-orange-600'
+                                        } text-white`}
+                                    >
+                                        <h3 className="text-xl font-bold mb-2">
+                                            <Icon name="clock" className="inline mr-2" />
+                                            Quick Fire
+                                        </h3>
+                                        <p className="text-sm opacity-90">
+                                            Race against time and earn points
+                                        </p>
+                                    </button>
+
+                                    <button
+                                        onClick={() => handleStartStudy('spaced', 'all')}
+                                        disabled={cards.length === 0}
+                                        className={`w-full p-6 rounded-xl text-left transition-all ${
+                                            cards.length === 0
+                                                ? 'opacity-50 cursor-not-allowed'
+                                                : 'hover:scale-[1.02] cursor-pointer'
+                                        } ${
+                                            theme === 'dark' 
+                                                ? 'bg-gradient-to-r from-green-600 to-green-700' 
+                                                : 'bg-gradient-to-r from-green-500 to-green-600'
+                                        } text-white`}
+                                    >
+                                        <h3 className="text-xl font-bold mb-2">
+                                            <Icon name="sparkles" className="inline mr-2" />
+                                            Spaced Repetition
+                                        </h3>
+                                        <p className="text-sm opacity-90">
+                                            Smart review based on your performance
+                                        </p>
+                                    </button>
                                 </div>
                                 
-                                {/* Quick Stats */}
-                                <div className={`grid grid-cols-3 gap-3 ${
-                                    theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                                }`}>
-                                    {[1, 2, 3, 4, 5, 6].map(pt => {
-                                        const count = cards.filter(c => (c.points || 1) === pt).length;
-                                        if (count === 0) return null;
-                                        return (
-                                            <div key={pt} className={`p-3 rounded-lg text-center ${
-                                                theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
-                                            }`}>
-                                                <div className={`text-lg font-bold px-3 py-1 rounded inline-block mb-1 ${getPointsColor(pt)}`}>
-                                                    {pt}
-                                                </div>
-                                                <div className="text-sm font-medium">{count} cards</div>
-                                            </div>
-                                        );
-                                    }).filter(Boolean)}
-                                </div>
+                                {cards.length === 0 && (
+                                    <div className={`text-center p-6 rounded-xl ${
+                                        theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
+                                    }`}>
+                                        <p className="text-gray-500">
+                                            Create some cards first to start studying!
+                                        </p>
+                                    </div>
+                                )}
                             </div>
-                        )}
-                        
-                        {(activeView === 'study' || activeView === 'cards') && isStudying && studyMode === 'manual' && (
-                            <MobileStudyMode
-                                cards={studyCards}
-                                onComplete={handleStudyComplete}
-                            />
-                        )}
-                        
-                        {(activeView === 'study' || activeView === 'cards') && isStudying && studyMode === 'continuous' && (
-                            <ContinuousStudyMode
-                                cards={studyCards}
-                                onComplete={handleStudyComplete}
-                                onExit={() => {
-                                    setIsStudying(false);
-                                    setStudyCards([]);
-                                    setStudyMode('manual');
-                                    setStudyPointFilter([]);
-                                }}
-                            />
-                        )}
-                        
-                        {activeView === 'stats' && (
-                            <div className="space-y-6">
-                                <h2 className="text-2xl font-bold text-center">Your Progress 📊</h2>
+                        ) : (
+                            <div className="p-4 space-y-6">
+                                <div>
+                                    <h2 className="text-2xl font-bold mb-2">Statistics</h2>
+                                    <p className="text-gray-500">Your study progress</p>
+                                </div>
                                 
+                                {/* Overall stats */}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className={`p-4 rounded-xl ${
                                         theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                                    } text-center`}>
-                                        <div className="text-3xl font-bold text-blue-500">{cards.length}</div>
-                                        <div className="text-sm text-gray-500">Total Cards</div>
-                                        <div className="text-xs text-gray-400 mt-1">All 78 crane questions loaded!</div>
+                                    }`}>
+                                        <h3 className="text-3xl font-bold">{cards.length}</h3>
+                                        <p className="text-sm text-gray-500">Total Cards</p>
                                     </div>
-                                    
                                     <div className={`p-4 rounded-xl ${
                                         theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                                    } text-center`}>
-                                        <div className="text-2xl font-bold text-yellow-500">
-                                            {totalPoints}
-                                        </div>
-                                        <div className="text-sm text-gray-500">Total Points</div>
+                                    }`}>
+                                        <h3 className="text-3xl font-bold">
+                                            {cards.filter(c => getCardStats(c.id).attempts > 0).length}
+                                        </h3>
+                                        <p className="text-sm text-gray-500">Cards Studied</p>
                                     </div>
-                                    
-                                    <div className={`p-4 rounded-xl ${
-                                        theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                                    } text-center`}>
-                                        <div className="text-2xl font-bold text-purple-500">
-                                            {Array.from(categories).length}
-                                        </div>
-                                        <div className="text-sm text-gray-500">Categories</div>
+                                </div>
+                                
+                                {/* Study streak */}
+                                <div className={`p-4 rounded-xl ${
+                                    theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+                                }`}>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="font-semibold">Study Activity</h3>
+                                        <Icon name="fire" className="text-orange-500" />
                                     </div>
-                                    
-                                    <div className={`p-4 rounded-xl ${
-                                        theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-                                    } text-center`}>
-                                        <div className="text-2xl font-bold text-green-500">
-                                            {state.studySessions.length}
-                                        </div>
-                                        <div className="text-sm text-gray-500">Study Sessions</div>
+                                    <div className="grid grid-cols-7 gap-2">
+                                        {[...Array(28)].map((_, i) => {
+                                            const date = new Date();
+                                            date.setDate(date.getDate() - (27 - i));
+                                            const dayStudied = cards.some(card => {
+                                                const stats = getCardStats(card.id);
+                                                if (!stats.lastReview) return false;
+                                                const reviewDate = new Date(stats.lastReview);
+                                                return reviewDate.toDateString() === date.toDateString();
+                                            });
+                                            
+                                            return (
+                                                <div
+                                                    key={i}
+                                                    className={`aspect-square rounded ${
+                                                        dayStudied
+                                                            ? 'bg-green-500'
+                                                            : theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
+                                                    }`}
+                                                    title={date.toLocaleDateString()}
+                                                />
+                                            );
+                                        })}
                                     </div>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        Last 4 weeks of activity
+                                    </p>
                                 </div>
                                 
                                 {/* Points breakdown */}
