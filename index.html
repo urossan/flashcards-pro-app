@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1f2937">
-    <title>Flash Cards Pro v6.4</title>
+    <title>Flash Cards Pro v6.5</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -192,8 +192,8 @@
 
         // Storage Service - Fixed
         class StorageService {
-            static STORAGE_KEY = 'flashcards-pro-v64';
-            static VERSION = '6.4';
+            static STORAGE_KEY = 'flashcards-pro-v65';
+            static VERSION = '6.5';
             
             static save(state) {
                 try {
@@ -870,7 +870,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             );
         }
 
-        // Continuous Study Mode - MODIFIED AS REQUESTED
+        // Continuous Study Mode - FIXED v6.5
         function ContinuousStudyMode({ cards, selectedPoints = [], availablePoints = [], onComplete, onExit }) {
             const { state: { theme, settings } } = useFlashCards();
             const [currentIndex, setCurrentIndex] = useState(0);
@@ -897,41 +897,40 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                     setIsPaused(false);
                 });
                 
-                await playCurrentCard();
+                await playCardsSequentially(0);
             };
             
-            const playCurrentCard = async () => {
-                if (!ContinuousStudyService.isRunning || ContinuousStudyService.isPaused) return;
-                
-                const card = cards[currentIndex];
-                const cleanQ = card.question.replace(/^Q\d+\)\s*/, '');
-                
-                // Read both question and answer together
-                const fullText = `Question: ${cleanQ}. Answer: ${card.answer}`;
-                await ContinuousStudyService.speakAndWait(fullText, settings, 2000);
-                
-                if (!ContinuousStudyService.isRunning) return;
-                
-                // Auto-advance to next
-                if (currentIndex < cards.length - 1) {
-                    setCurrentIndex(prev => prev + 1);
-                    await playCurrentCard();
-                } else {
-                    // Complete
-                    const duration = Math.floor((Date.now() - startTime) / 1000);
-                    const totalPoints = cards.reduce((sum, card) => sum + (card.points || 1), 0);
+            const playCardsSequentially = async (startIndex) => {
+                for (let i = startIndex; i < cards.length; i++) {
+                    if (!ContinuousStudyService.isRunning || ContinuousStudyService.isPaused) return;
                     
-                    ContinuousStudyService.stop();
-                    setIsPlaying(false);
+                    // Update the current index
+                    setCurrentIndex(i);
                     
-                    onComplete({ 
-                        correct: cards.length,
-                        incorrect: 0, 
-                        duration,
-                        totalPoints,
-                        mode: 'continuous'
-                    });
+                    const card = cards[i];
+                    const cleanQ = card.question.replace(/^Q\d+\)\s*/, '');
+                    
+                    // Read both question and answer together
+                    const fullText = `Question: ${cleanQ}. Answer: ${card.answer}`;
+                    await ContinuousStudyService.speakAndWait(fullText, settings, 2000);
+                    
+                    if (!ContinuousStudyService.isRunning) return;
                 }
+                
+                // Complete after all cards
+                const duration = Math.floor((Date.now() - startTime) / 1000);
+                const totalPoints = cards.reduce((sum, card) => sum + (card.points || 1), 0);
+                
+                ContinuousStudyService.stop();
+                setIsPlaying(false);
+                
+                onComplete({ 
+                    correct: cards.length,
+                    incorrect: 0, 
+                    duration,
+                    totalPoints,
+                    mode: 'continuous'
+                });
             };
             
             const pauseStudy = () => {
@@ -942,7 +941,8 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
             const resumeStudy = () => {
                 setIsPaused(false);
                 ContinuousStudyService.resume();
-                playCurrentCard();
+                // Resume from current index
+                playCardsSequentially(currentIndex);
             };
             
             const stopStudy = () => {
@@ -981,7 +981,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                     <div className="text-center">
                         <h2 className="text-2xl font-bold mb-2">🎵 Continuous Study Mode</h2>
                         <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Question and answer displayed together • Auto-play enabled
+                            Auto-progression through cards • Fixed in v6.5
                             {selectedPoints.length > 0 && selectedPoints.length < availablePoints.length && 
                                 ` • Studying ${selectedPoints.sort((a,b) => a-b).map(p => p+'pt').join(', ')} cards`
                             }
@@ -1638,7 +1638,7 @@ Answer: A divice fitted to a crane that shows the radius at witch the crane is o
                                     <span className={`text-sm px-2 py-0.5 rounded-full ${
                                         theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
                                     }`}>
-                                        v6.4
+                                        v6.5
                                     </span>
                                 </h1>
                                 
